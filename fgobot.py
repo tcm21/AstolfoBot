@@ -88,27 +88,30 @@ def get_skill(type: str, type2: str = ""):
         return "Not found."
 
 @bot.command(
-    scope=[760776452609802250,450114606669496320],
+    scope=[760776452609802250],
 )
 @interactions.option(str, name="name", description="Servant name", required=True)
 async def servant(ctx: interactions.CommandContext, name: str):
     await ctx.send(embeds=get_servant(name))
 
 @bot.command(
-    scope=[760776452609802250,450114606669496320],
+    scope=[760776452609802250],
 )
 @interactions.option(str, name="type", description="Skill type", required=True, autocomplete=True)
 @interactions.option(str, name="type2", description="Skill type 2", required=False, autocomplete=True)
 async def skill(ctx: interactions.CommandContext, type: str, type2: str = ""):
-    print(type + type2)
     await ctx.send(get_skill(type, type2))
+
+with open('function_names.json') as fn_names:
+    fn_names_json = json.load(fn_names)
 
 def populateSkillNamesList(input_value: str):
     options = "none ┃ addState ┃ subState ┃ damage ┃ damageNp ┃ gainStar ┃ gainHp ┃ gainNp ┃ lossNp ┃ shortenSkill ┃ extendSkill ┃ releaseState ┃ lossHp ┃ instantDeath ┃ damageNpPierce ┃ damageNpIndividual ┃ addStateShort ┃ gainHpPer ┃ damageNpStateIndividual ┃ hastenNpturn ┃ delayNpturn ┃ damageNpHpratioHigh ┃ damageNpHpratioLow ┃ cardReset ┃ replaceMember ┃ lossHpSafe ┃ damageNpCounter ┃ damageNpStateIndividualFix ┃ damageNpSafe ┃ callServant ┃ ptShuffle ┃ lossStar ┃ changeServant ┃ changeBg ┃ damageValue ┃ withdraw ┃ fixCommandcard ┃ shortenBuffturn ┃ extendBuffturn ┃ shortenBuffcount ┃ extendBuffcount ┃ changeBgm ┃ displayBuffstring ┃ resurrection ┃ gainNpBuffIndividualSum ┃ setSystemAliveFlag ┃ forceInstantDeath ┃ damageNpRare ┃ gainNpFromTargets ┃ gainHpFromTargets ┃ lossHpPer ┃ lossHpPerSafe ┃ shortenUserEquipSkill ┃ quickChangeBg ┃ shiftServant ┃ damageNpAndCheckIndividuality ┃ absorbNpturn ┃ overwriteDeadType ┃ forceAllBuffNoact ┃ breakGaugeUp ┃ breakGaugeDown ┃ moveToLastSubmember ┃ expUp ┃ qpUp ┃ dropUp ┃ friendPointUp ┃ eventDropUp ┃ eventDropRateUp ┃ eventPointUp ┃ eventPointRateUp ┃ transformServant ┃ qpDropUp ┃ servantFriendshipUp ┃ userEquipExpUp ┃ classDropUp ┃ enemyEncountCopyRateUp ┃ enemyEncountRateUp ┃ enemyProbDown ┃ getRewardGift ┃ sendSupportFriendPoint ┃ movePosition ┃ revival ┃ damageNpIndividualSum ┃ damageValueSafe ┃ friendPointUpDuplicate ┃ moveState ┃ changeBgmCostume ┃ func126 ┃ func127 ┃ updateEntryPositions ┃ buddyPointUp ┃ addFieldChangeToField ┃ subFieldBuff".split(" ┃ ")
     filteredOptions = [option for option in options if input_value.upper() in option.upper()]
     choices = []
     for option in filteredOptions[0:24]:
-        choices.append(interactions.Choice(name=option, value=option))
+        text = fn_names_json.get(option, option)
+        choices.append(interactions.Choice(name=text, value=option))
     return choices
 
 @bot.autocomplete(command="skill", name="type")
