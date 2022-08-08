@@ -65,19 +65,8 @@ def get_functions(type: str, target: str = ""):
     functions = json.loads(response.text)
     return functions
 
-def get_skill_with_type(type: str, flag: str = "skill", target: str = ""):
-    """Get a list of skills or NP with the selected effects.
-
-    Args:
-        type (str): Effect name,
-        flag (str, optional): "skill" or "NP". Defaults to "skill".
-        target (str): Effect target
-
-    Returns:
-        A list of skill objects with the specified effect.
-    """
+def get_skills_from_functions(functions, flag: str = "skill"):
     found_skills = []
-    functions = get_functions(type, target)
     for function in functions:
         for skill in function.get('reverse').get('basic').get(flag):
             if skill.get('name') == "": continue
@@ -94,7 +83,34 @@ def get_skill_with_type(type: str, flag: str = "skill", target: str = ""):
                 found_skills.append(skill)
     return found_skills
 
-def get_skill(type: str, type2: str = "", flag: str = "skill", target: str = ""):
+def get_skills_with_type(type: str, flag: str = "skill", target: str = ""):
+    """Get a list of skills or NP with the selected effects.
+
+    Args:
+        type (str): Effect name,
+        flag (str, optional): "skill" or "NP". Defaults to "skill".
+        target (str): Effect target
+
+    Returns:
+        A list of skill objects with the specified effect.
+    """
+    functions = get_functions(type, target)
+    found_skills = get_skills_from_functions(functions, flag)
+    return found_skills
+
+def get_skills_with_buff(buffType: str = "", flag: str = "skill"):
+    if buffType == "": return []
+    url = f"https://api.atlasacademy.io/basic/JP/buff/search?reverse=true&reverseDepth=skillNp&reverseData=basic&type={buffType}"
+    response = requests.get(url)
+    buffs = json.loads(response.text)
+    skills = []
+    for buff in buffs:
+        functions = buff.get("reverse").get("basic").get("function")
+        skills = get_skills_from_functions(functions, flag)
+
+    return skills
+
+def get_skills(type: str, type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
     """Get skills or noble phantasms with the selected effects.
 
     Args:
@@ -102,21 +118,19 @@ def get_skill(type: str, type2: str = "", flag: str = "skill", target: str = "")
         type2 (str, optional): Effect 2 (Optional)
         flag (str, optional): "skill" for skills or "NP" for noble phantasm. Defaults to "skill".
         target (str): Effect target
+        buffType1 (str): Buff effect 1 (only works if type is 'buff')
+        buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
 
     Returns:
         A list of servants who has skills/NP with the effects specified.
     """
-    found_list_1 = get_skill_with_type(type, flag, target)
-    found_list_2 = get_skill_with_type(type2, flag, target)
-    matched_skills_list = []
-    result_str = [f"type: {type}, type2: {type2}\n"]
-    if len(found_list_2) > 0:
-        for element in found_list_1:
-            if element in found_list_2:
-                matched_skills_list.append(element)
-    else:
-        matched_skills_list = found_list_1
-    
+    found_list_1 = get_skills_with_type(type, flag, target)
+    found_list_2 = get_skills_with_type(type2, flag, target)
+    found_buff_list1 = get_skills_with_buff(buffType1, flag)
+    found_buff_list2 = get_skills_with_buff(buffType2, flag)
+    matched_skills_list = common_elements(found_list_1, found_list_2, found_buff_list1, found_buff_list2)
+    result_str = []
+
     embed = interactions.Embed(
         title="Search results",
         description="",
@@ -146,6 +160,17 @@ def get_skill(type: str, type2: str = "", flag: str = "skill", target: str = "")
         embed.add_field("Not found.", "Try different queries")
         return embed
 
+def common_elements(*lists):
+    common_list = []
+    for list in lists:
+        if len(list) == 0:
+            continue
+        if len(common_list) == 0 and len(list) > 0:
+            common_list = list
+            continue
+        common_list = [element for element in list if element in common_list]
+    return common_list
+
 @bot.command(
     scope=[760776452609802250],
 )
@@ -160,7 +185,7 @@ async def servant(ctx: interactions.CommandContext, name: str):
 @interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 async def skill(ctx: interactions.CommandContext, type: str, type2: str = "", target: str = ""):
-    await ctx.send(embeds=get_skill(type, type2, "skill", target))
+    await ctx.send(embeds=get_skills(type, type2, "skill", target))
 
 with open('function_names.json') as fn_names:
     fn_names_json = json.load(fn_names)
@@ -211,7 +236,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str
 @interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 async def np(ctx: interactions.CommandContext, type: str, type2: str = "", target: str = ""):
-    await ctx.send(embeds=get_skill(type, type2, "NP", target))
+    await ctx.send(embeds=get_skills(type, type2, "NP", target))
 
 @bot.autocomplete(command="np", name="type")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
