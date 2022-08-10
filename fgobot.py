@@ -31,6 +31,8 @@ def get_servant(name: str, region: str = "JP") -> interactions.Embed:
     response = session.get(
         f"https://api.atlasacademy.io/nice/{region}/servant/search?name={name}")
     servants = json.loads(response.text)
+    if not isinstance(servants, list):
+        return None
     pages = []
     for idx, servant in enumerate(servants):
         skill1 = servant.get('skills')[0].get('name')
@@ -285,7 +287,7 @@ def common_elements(*lists):
 )
 @interactions.option(str, name="servant-name", description="Servant name", required=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = ""):
+async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = "JP"):
     await ctx.defer()
     pages = get_servant(servantName, region)
     await send_paginator(ctx, pages)
@@ -306,7 +308,7 @@ async def skill(
     target: str = "",
     buff: str = "",
     buff2: str = "",
-    region: str = "",
+    region: str = "JP",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
@@ -333,7 +335,7 @@ async def np(
     target: str = "",
     buff: str = "",
     buff2: str = "",
-    region: str = "",
+    region: str = "JP",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
@@ -361,7 +363,7 @@ async def skillOrNp(
     target: str = "",
     buff: str = "",
     buff2: str = "",
-    region: str = "",
+    region: str = "JP",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
@@ -380,7 +382,7 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
         ctx (interactions.CommandContext): Application context
         pages (_type_): Result data
     """
-    if len(pages) == 0:
+    if pages == None or len(pages) == 0:
         await ctx.send("No result.")
     if len(pages) == 1:
         await ctx.send(embeds=pages[0].embeds)
