@@ -18,6 +18,7 @@ bot = interactions.Client(
 
 session = requests_cache.CachedSession()
 
+
 def get_servant(name: str, region: str = "JP") -> interactions.Embed:
     """Gets the servant info based on the search query.
 
@@ -26,66 +27,91 @@ def get_servant(name: str, region: str = "JP") -> interactions.Embed:
         region (str): Region (Default: JP)
 
     Returns:
-        `interactions.Embed`: An embed discord object containing the servant info.
+        list: servants object
     """
     response = session.get(
         f"https://api.atlasacademy.io/nice/{region}/servant/search?name={name}")
     servants = json.loads(response.text)
     if not isinstance(servants, list) or len(servants) == 0:
-        if name.isnumeric():
-            response = session.get(
-                f"https://api.atlasacademy.io/nice/{region}/servant/{name}")
-            servant = json.loads(response.text)
-            if servant.get('detail') == "Svt not found":
-                return None
-            else:
-                servants = []
-                servants.append(servant)
-        else:
-            return None
+        return []
 
+    return servants
+
+
+def get_servant_by_id(id: int, region: str = "JP"):
+    """Get servant by ID
+
+    Args:
+        id (int): Servant ID
+        region (str, optional): Region. Defaults to "JP".
+
+    Returns:
+        Servant object
+    """
+    response = session.get(
+        f"https://api.atlasacademy.io/nice/{region}/servant/{id}")
+    servant = json.loads(response.text)
+    if servant.get('detail') == "Svt not found":
+        return None
+    else:
+        return servant
+
+
+def create_servant_pages(servant):
     pages = []
-    for idx, servant in enumerate(servants):
-        skill1 = servant.get('skills')[0].get('name')
-        skill1desc = servant.get('skills')[0].get('detail')
-        skill2 = servant.get('skills')[1].get('name')
-        skill2desc = servant.get('skills')[1].get('detail')
-        skill3 = servant.get('skills')[2].get('name')
-        skill3desc = servant.get('skills')[2].get('detail')
-        embed = interactions.Embed(
-            title="Servant Info",
-            description="",
-            color=interactions.Color.black()
-        )
-        embed.set_thumbnail(
-            url=servant
-            .get('extraAssets')
-            .get('faces')
-            .get('ascension')
-            .get('1')
-        )
 
-        embed.add_field("Name", servant.get('name'))
-        embed.add_field("Rarity", "★"*servant.get('rarity'))
-        embed.add_field("Class", servant.get('className'))
-        embed.add_field("Attribute", servant.get('attribute'))
-        embed.add_field("Cards", (
-            f"{servant.get('cards')[0][0].upper()}"
-            f"{servant.get('cards')[1][0].upper()}"
-            f"{servant.get('cards')[2][0].upper()}"
-            f"{servant.get('cards')[3][0].upper()}"
-            f"{servant.get('cards')[4][0].upper()}"
-        ))
-        embed.add_field(f"Skill 1: {skill1}", skill1desc)
-        embed.add_field(f"Skill 2: {skill2}", skill2desc)
-        embed.add_field(f"Skill 3: {skill3}", skill3desc)
-        for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
-            embed.add_field(
-                f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card')})",
-                noblePhantasm.get('detail')
-            )
-        pages.append(Page(f"{idx + 1}/{len(servants)}", embed))
-    
+    # Basic info
+    embed = interactions.Embed(
+        title="Basic Info",
+        description="",
+        color=interactions.Color.blurple()
+    )
+    embed.set_thumbnail(
+        url=servant
+        .get('extraAssets')
+        .get('faces')
+        .get('ascension')
+        .get('1')
+    )
+
+    embed.add_field("Name", servant.get('name'))
+    embed.add_field("Rarity", "★"*servant.get('rarity'))
+    embed.add_field("Class", servant.get('className'))
+    embed.add_field("Attribute", servant.get('attribute'))
+    embed.add_field("Cards", (
+        f"{servant.get('cards')[0][0].upper()}"
+        f"{servant.get('cards')[1][0].upper()}"
+        f"{servant.get('cards')[2][0].upper()}"
+        f"{servant.get('cards')[3][0].upper()}"
+        f"{servant.get('cards')[4][0].upper()}"
+    ))
+    pages.append(Page(f"Basic Info", embed))
+
+    # Skills
+    embed = interactions.Embed(
+        title="Skills",
+        description="",
+        color=interactions.Color.blurple()
+    )
+
+    for index, skill in enumerate(servant.get('skills')):
+        embed.add_field(
+            f"Skill {index + 1}: {skill.get('name')}", skill.get('detail'))
+    pages.append(Page(f"Skills", embed))
+
+    # NPs
+    embed = interactions.Embed(
+        title="Noble Phantasms",
+        description="",
+        color=interactions.Color.blurple()
+    )
+    for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
+        embed.add_field(
+            f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card')})",
+            noblePhantasm.get('detail')
+        )
+    pages.append(Page(f"Noble Phantasms", embed))
+
     return pages
 
 
@@ -121,8 +147,8 @@ def get_skills_from_functions(functions, flag: str = "skill"):
             servant_found = False
             for servant in servants:
                 if (servant.get('name') == "" or
-                        servant.get('type') == "servantEquip" or
-                        servant.get('type') == "enemy"
+                    servant.get('type') == "servantEquip" or
+                    servant.get('type') == "enemy"
                     ):
                     continue
                 servant_found = True
@@ -218,7 +244,8 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                 servantList.append(servant_id)
                 if pageCount >= maxLimit:
                     embeds.append(embed)
-                    embed = create_embed(type, type2, flag, target, buffType1, buffType2)
+                    embed = create_embed(
+                        type, type2, flag, target, buffType1, buffType2)
                     pageCount = 0
                 skillName = skill.get('name')
                 embed.add_field(
@@ -228,7 +255,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                     )
                 )
                 pageCount += 1
-    
+
     if (totalCount == 0):
         embed.add_field("Not found.", "Try different parameters")
     embeds.append(embed)
@@ -236,9 +263,11 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     cnt = 0
     for resEmbed in embeds:
         cnt += 1
-        pages.append(Page(f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}", resEmbed))
+        pages.append(Page(
+            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}", resEmbed))
 
     return pages
+
 
 def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", region: str = "JP"):
     """Creates an embed object for the result data.
@@ -254,7 +283,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
 
     Returns:
         `interactions.Embed`: Embed object
-    """    
+    """
     embed = interactions.Embed(
         title=f"{'Skills' if flag == 'skill' else 'Noble Phantasms'}",
         description="",
@@ -273,13 +302,13 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
         embed.add_field("Buff 2", buff_names_json.get(buffType2), True)
     if region != "":
         embed.add_field("Region", region, True)
-    
+
     return embed
 
 
 def common_elements(*lists):
     """Finds common elements in a list of lists
-    """    
+    """
     common_list = []
     for list in lists:
         if list == None:
@@ -294,9 +323,8 @@ def common_elements(*lists):
     [res.append(x) for x in common_list if x not in res]
     return res
 
+
 # Commands
-
-
 @bot.command(
     description="Servant info lookup",
 )
@@ -304,8 +332,31 @@ def common_elements(*lists):
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = "JP"):
     await ctx.defer()
-    pages = get_servant(servantName, region)
+    servants = get_servant(servantName, region)
+    if servants == None or len(servants) == 0:
+        await ctx.send("Not found.")
+    if len(servants) == 1:
+        pages = create_servant_pages(servants[0])
+        await send_paginator(ctx, pages)
+    else:
+        options = []
+        for servant in servants:
+            options.append(interactions.SelectOption(
+                label=f"{servant.get('name')} ({servant.get('className')})", value=servant.get("id")))
+        selectMenu = interactions.SelectMenu(
+            options=options,
+            placeholder="Select one...",
+            custom_id="menu_component",
+        )
+        await ctx.send("Multiple results found.", components=selectMenu)
+
+
+@bot.component("menu_component")
+async def select_response(ctx, value=[]):
+    servant = get_servant_by_id(value[0])
+    pages = create_servant_pages(servant)
     await send_paginator(ctx, pages)
+
 
 @bot.command(
     description="Search for servants with skills that matches the specified parameters",
@@ -403,9 +454,9 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
         await ctx.send(embeds=pages[0].embeds)
     elif len(pages) >= 2:
         await Paginator(
-            client = bot,
-            ctx = ctx,
-            pages = pages,
+            client=bot,
+            ctx=ctx,
+            pages=pages,
         ).run()
 
 # Autocomplete functions
@@ -491,6 +542,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str =
 @bot.autocomplete(command="skill-or-np", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
     await ctx.populate(populateBuffList(buff2))
+
 
 @bot.autocomplete(command="servant", name="region")
 @bot.autocomplete(command="skill", name="region")
