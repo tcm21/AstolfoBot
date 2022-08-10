@@ -171,6 +171,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
         target (str): Effect target
         buffType1 (str): Buff effect 1 (only works if type is 'buff')
         buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
+        region (str): Region (Default: JP)
 
     Returns:
         Pages of embeds containing the skills data.
@@ -228,7 +229,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
 
     return pages
 
-def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
+def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", region: str = "JP"):
     """Creates an embed object for the result data.
 
     Args:
@@ -238,6 +239,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
         target (str): Effect target
         buffType1 (str): Buff effect 1 (only works if type is 'buff')
         buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
+        region (str): Region (Default: JP)
 
     Returns:
         `interactions.Embed`: Embed object
@@ -258,6 +260,8 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
         embed.add_field("Buff 1", buff_names_json.get(buffType1), True)
     if buffType2 != "":
         embed.add_field("Buff 2", buff_names_json.get(buffType2), True)
+    if region != "":
+        embed.add_field("Region", region, True)
     
     return embed
 
