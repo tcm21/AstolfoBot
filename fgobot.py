@@ -14,7 +14,6 @@ if token == "" or token == None:
 
 bot = interactions.Client(
     token=token,
-    default_scope=[760776452609802250]
 )
 
 session = requests_cache.CachedSession()
