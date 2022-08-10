@@ -274,14 +274,7 @@ async def skill(
 
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2)
-    if len(pages) == 1:
-        await ctx.send(embeds=pages[0].embeds)
-    elif len(pages) >= 2:
-        await Paginator(
-            client = bot,
-            ctx = ctx,
-            pages = pages,
-        ).run()
+    await send_paginator(ctx, pages)
 
 
 @bot.command(
@@ -306,14 +299,8 @@ async def np(
 
     await ctx.defer()
     pages = get_skills(type, type2, "NP", target, buff, buff2)
-    if len(pages) == 1:
-        await ctx.send(embeds=pages[0].embeds)
-    elif len(pages) >= 2:
-        await Paginator(
-            client = bot,
-            ctx = ctx,
-            pages = pages,
-        ).run()
+    await send_paginator(ctx, pages)
+
 
 @bot.command(
     description="Search for servants with NP and/or skills that matches the specified parameters",
@@ -339,6 +326,16 @@ async def skillOrNp(
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2)
     pages.extend(get_skills(type, type2, "NP", target, buff, buff2))
+    await send_paginator(ctx, pages)
+
+
+async def send_paginator(ctx: interactions.CommandContext, pages):
+    """ Creates a paginator for the pages
+
+    Args:
+        ctx (interactions.CommandContext): Application context
+        pages (_type_): Result data
+    """    
     if len(pages) == 1:
         await ctx.send(embeds=pages[0].embeds)
     elif len(pages) >= 2:
