@@ -14,22 +14,22 @@ if token == "" or token == None:
 
 bot = interactions.Client(
     token=token,
-    # default_scope=760776452609802250
 )
 
 session = requests_cache.CachedSession()
 
-def get_servant(name: str) -> interactions.Embed:
+def get_servant(name: str, region: str = "JP") -> interactions.Embed:
     """Gets the servant info based on the search query.
 
     Args:
         name (str): Servant name
+        region (str): Region (Default: JP)
 
     Returns:
         `interactions.Embed`: An embed discord object containing the servant info.
     """
     response = session.get(
-        "https://api.atlasacademy.io/nice/JP/servant/search?name=" + name)
+        f"https://api.atlasacademy.io/nice/{region}/servant/search?name={name}")
     servants = json.loads(response.text)
     pages = []
     for idx, servant in enumerate(servants):
@@ -76,12 +76,13 @@ def get_servant(name: str) -> interactions.Embed:
     return pages
 
 
-def get_functions(type: str, target: str = ""):
+def get_functions(type: str, target: str = "", region: str = "JP"):
     """Gets all the effects (functions) with the specified effect.
 
     Args:
         type (str): Effect name
         target (str): Effect target
+        region (str): Region (Default: JP)
 
     Returns:
         A list of functions with the specified effect.
@@ -91,7 +92,7 @@ def get_functions(type: str, target: str = ""):
     targetQueryStr = ""
     if target != "":
         targetQueryStr = f"&targetType={target}"
-    url = f"https://api.atlasacademy.io/basic/JP/function/search?reverse=true&reverseDepth=servant&type={type}{targetQueryStr}"
+    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&type={type}{targetQueryStr}"
     response = session.get(url)
     functions = json.loads(response.text)
     return functions
@@ -117,28 +118,29 @@ def get_skills_from_functions(functions, flag: str = "skill"):
     return found_skills
 
 
-def get_skills_with_type(type: str, flag: str = "skill", target: str = ""):
+def get_skills_with_type(type: str, flag: str = "skill", target: str = "", region: str = "JP"):
     """Get a list of skills or NP with the selected effects.
 
     Args:
         type (str): Effect name,
         flag (str, optional): "skill" or "NP". Defaults to "skill".
         target (str): Effect target
+        region (str): Region (Default: JP)
 
     Returns:
         A list of skill objects with the specified effect.
     """
     if type == "":
         return None
-    functions = get_functions(type, target)
+    functions = get_functions(type, target, region)
     found_skills = get_skills_from_functions(functions, flag)
     return found_skills
 
 
-def get_skills_with_buff(buffType: str = "", flag: str = "skill"):
+def get_skills_with_buff(buffType: str = "", flag: str = "skill", region: str = "JP"):
     if buffType == "":
         return None
-    url = f"https://api.atlasacademy.io/basic/JP/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&type={buffType}"
+    url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&type={buffType}"
     response = session.get(url)
     buffs = json.loads(response.text)
     skills = []
@@ -149,15 +151,15 @@ def get_skills_with_buff(buffType: str = "", flag: str = "skill"):
     return skills
 
 
-def get_skill_details(id: str = "", flag: str = "skill"):
+def get_skill_details(id: str = "", flag: str = "skill", region: str = "JP"):
     if id == "":
         return None
-    url = f"https://api.atlasacademy.io/nice/JP/{flag}/{id}"
+    url = f"https://api.atlasacademy.io/nice/{region}/{flag}/{id}"
     response = session.get(url)
     return json.loads(response.text)
 
 
-def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
+def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", region: str = "JP"):
     """Get skills or noble phantasms with the selected effects.
 
     Args:
@@ -171,10 +173,10 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     Returns:
         Pages of embeds containing the skills data.
     """
-    found_list_1 = get_skills_with_type(type, flag, target)
-    found_list_2 = get_skills_with_type(type2, flag, target)
-    found_buff_list1 = get_skills_with_buff(buffType1, flag)
-    found_buff_list2 = get_skills_with_buff(buffType2, flag)
+    found_list_1 = get_skills_with_type(type, flag, target, region)
+    found_list_2 = get_skills_with_type(type2, flag, target, region)
+    found_buff_list1 = get_skills_with_buff(buffType1, flag, region)
+    found_buff_list2 = get_skills_with_buff(buffType2, flag, region)
     matched_skills_list = common_elements(
         found_list_1, found_list_2, found_buff_list1, found_buff_list2)
 
@@ -208,7 +210,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                 embed.add_field(
                     f"{totalCount}: {servant.get('name')} {servant.get('className')}\n",
                     (
-                        f"[{skillName}](https://apps.atlasacademy.io/db/JP/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
+                        f"[{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
                     )
                 )
                 pageCount += 1
@@ -282,9 +284,10 @@ def common_elements(*lists):
     description="Servant info lookup",
 )
 @interactions.option(str, name="servant-name", description="Servant name", required=True)
-async def servant(ctx: interactions.CommandContext, servantName: str = ""):
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = ""):
     await ctx.defer()
-    pages = get_servant(servantName)
+    pages = get_servant(servantName, region)
     await send_paginator(ctx, pages)
 
 @bot.command(
@@ -295,6 +298,7 @@ async def servant(ctx: interactions.CommandContext, servantName: str = ""):
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def skill(
     ctx: interactions.CommandContext,
     type: str = "",
@@ -302,13 +306,14 @@ async def skill(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2)
+    pages = get_skills(type, type2, "skill", target, buff, buff2, region)
     await send_paginator(ctx, pages)
 
 
@@ -320,6 +325,7 @@ async def skill(
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def np(
     ctx: interactions.CommandContext,
     type: str = "",
@@ -327,13 +333,14 @@ async def np(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "NP", target, buff, buff2)
+    pages = get_skills(type, type2, "NP", target, buff, buff2, region)
     await send_paginator(ctx, pages)
 
 
@@ -346,6 +353,7 @@ async def np(
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def skillOrNp(
     ctx: interactions.CommandContext,
     type: str = "",
@@ -353,14 +361,15 @@ async def skillOrNp(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2)
-    pages.extend(get_skills(type, type2, "NP", target, buff, buff2))
+    pages = get_skills(type, type2, "skill", target, buff, buff2, region)
+    pages.extend(get_skills(type, type2, "NP", target, buff, buff2, region))
     await send_paginator(ctx, pages)
 
 
@@ -465,5 +474,16 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str =
 @bot.autocomplete(command="skill-or-np", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
     await ctx.populate(populateBuffList(buff2))
+
+@bot.autocomplete(command="servant", name="region")
+@bot.autocomplete(command="skill", name="region")
+@bot.autocomplete(command="np", name="region")
+@bot.autocomplete(command="skill-or-np", name="region")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
+    choices = []
+    choices.append(interactions.Choice(name="NA", value="NA"))
+    choices.append(interactions.Choice(name="JP", value="JP"))
+    await ctx.populate(choices)
+
 
 bot.start()
