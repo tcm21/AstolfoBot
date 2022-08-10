@@ -18,11 +18,11 @@ bot = interactions.Client(
 
 session = requests_cache.CachedSession()
 
-def get_servant(name: str | int, region: str = "JP") -> interactions.Embed:
+def get_servant(name: str, region: str = "JP") -> interactions.Embed:
     """Gets the servant info based on the search query.
 
     Args:
-        name (str | int): Servant name
+        name (str): Servant name
         region (str): Region (Default: JP)
 
     Returns:
@@ -31,13 +31,16 @@ def get_servant(name: str | int, region: str = "JP") -> interactions.Embed:
     response = session.get(
         f"https://api.atlasacademy.io/nice/{region}/servant/search?name={name}")
     servants = json.loads(response.text)
-    if not isinstance(servants, list):
-        if isinstance(name, int):
+    if not isinstance(servants, list) or len(servants) == 0:
+        if name.isnumeric():
             response = session.get(
                 f"https://api.atlasacademy.io/nice/{region}/servant/{name}")
-            servants = json.loads(response.text)
-            if not isinstance(servants, list):
+            servant = json.loads(response.text)
+            if servant.get('detail') == "Svt not found":
                 return None
+            else:
+                servants = []
+                servants.append(servant)
         else:
             return None
 
@@ -299,7 +302,7 @@ def common_elements(*lists):
 )
 @interactions.option(str, name="servant-name", description="Servant name", required=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def servant(ctx: interactions.CommandContext, servantName: str | int = "", region: str = "JP"):
+async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = "JP"):
     await ctx.defer()
     pages = get_servant(servantName, region)
     await send_paginator(ctx, pages)
