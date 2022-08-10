@@ -5,7 +5,6 @@ from interactions.ext.paginator import Page, Paginator
 import requests_cache
 import os
 
-
 token = os.environ.get("TOKEN")
 if token == "" or token == None:
     configparser = configparser.ConfigParser()
@@ -76,8 +75,8 @@ def create_servant_pages(servant):
 
     embed.add_field("Name", servant.get('name'))
     embed.add_field("Rarity", "★"*servant.get('rarity'))
-    embed.add_field("Class", servant.get('className'))
-    embed.add_field("Attribute", servant.get('attribute'))
+    embed.add_field("Class", servant.get('className').capitalize())
+    embed.add_field("Attribute", servant.get('attribute').capitalize())
     embed.add_field("Cards", (
         f"{servant.get('cards')[0][0].upper()}"
         f"{servant.get('cards')[1][0].upper()}"
@@ -90,24 +89,25 @@ def create_servant_pages(servant):
     # Skills
     embed = interactions.Embed(
         title="Skills",
-        description="",
+        description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
         color=interactions.Color.blurple()
     )
 
-    for index, skill in enumerate(servant.get('skills')):
+    # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
+    for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
         embed.add_field(
-            f"Skill {index + 1}: {skill.get('name')}", skill.get('detail'))
+            f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
     pages.append(Page(f"Skills", embed))
 
     # NPs
     embed = interactions.Embed(
         title="Noble Phantasms",
-        description="",
+        description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
         color=interactions.Color.blurple()
     )
     for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
         embed.add_field(
-            f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card')})",
+            f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})",
             noblePhantasm.get('detail')
         )
     pages.append(Page(f"Noble Phantasms", embed))
@@ -238,7 +238,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                  != "heroine")  # Mash has her own category lmao
             ):
                 continue
-            servant_id = f"{servant.get('name')} {servant.get('className')}"
+            servant_id = f"{servant.get('name')} ({servant.get('className').capitalize()})"
             if servant_id not in servantList:
                 totalCount += 1
                 servantList.append(servant_id)
@@ -249,7 +249,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                     pageCount = 0
                 skillName = skill.get('name')
                 embed.add_field(
-                    f"{totalCount}: {servant.get('name')} {servant.get('className')}\n",
+                    f"{totalCount}: {servant.get('name')} ({servant.get('className').capitalize()})\n",
                     (
                         f"[{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
                     )
@@ -340,15 +340,15 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", regio
         await send_paginator(ctx, pages)
     else:
         options = []
-        for servant in servants:
+        for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{servant.get('name')} ({servant.get('className')})", value=servant.get("id")))
+                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})", value=servant.get("id")))
         selectMenu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
             custom_id="menu_component",
         )
-        await ctx.send("Multiple results found.", components=selectMenu)
+        await ctx.send(f"{len(servants)} matches found.", components=selectMenu)
 
 
 @bot.component("menu_component")
