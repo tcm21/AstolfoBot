@@ -25,38 +25,53 @@ def get_servant(name: str) -> interactions.Embed:
         name (str): Servant name
 
     Returns:
-        interactions.Embed: An embed discord object containing the servant info.
+        `interactions.Embed`: An embed discord object containing the servant info.
     """
     response = session.get(
         "https://api.atlasacademy.io/nice/JP/servant/search?name=" + name)
-    json_data = json.loads(response.text)
-    skill1 = json_data[0].get('skills')[0].get('name')
-    skill1desc = json_data[0].get('skills')[0].get('detail')
-    skill2 = json_data[0].get('skills')[1].get('name')
-    skill2desc = json_data[0].get('skills')[1].get('detail')
-    skill3 = json_data[0].get('skills')[2].get('name')
-    skill3desc = json_data[0].get('skills')[2].get('detail')
-    embed = interactions.Embed(
-        title="Servant Info",
-        description="",
-        color=interactions.Color.black()
-    )
-    embed.set_thumbnail(
-        url=json_data[0]
-        .get('extraAssets')
-        .get('faces')
-        .get('ascension')
-        .get('1')
-    )
+    servants = json.loads(response.text)
+    pages = []
+    for idx, servant in enumerate(servants):
+        skill1 = servant.get('skills')[0].get('name')
+        skill1desc = servant.get('skills')[0].get('detail')
+        skill2 = servant.get('skills')[1].get('name')
+        skill2desc = servant.get('skills')[1].get('detail')
+        skill3 = servant.get('skills')[2].get('name')
+        skill3desc = servant.get('skills')[2].get('detail')
+        embed = interactions.Embed(
+            title="Servant Info",
+            description="",
+            color=interactions.Color.black()
+        )
+        embed.set_thumbnail(
+            url=servant
+            .get('extraAssets')
+            .get('faces')
+            .get('ascension')
+            .get('1')
+        )
 
-    embed.add_field("Name", json_data[0].get('name'))
-    embed.add_field("Rarity", "★"*json_data[0].get('rarity'))
-    embed.add_field("Class", json_data[0].get('className'))
-    embed.add_field(f"Skill 1: {skill1}", skill1desc)
-    embed.add_field(f"Skill 2: {skill2}", skill2desc)
-    embed.add_field(f"Skill 3: {skill3}", skill3desc)
-
-    return embed
+        embed.add_field("Name", servant.get('name'))
+        embed.add_field("Rarity", "★"*servant.get('rarity'))
+        embed.add_field("Class", servant.get('className'))
+        embed.add_field("Cards", (
+            f"{servant.get('cards')[0][0].upper()}"
+            f"{servant.get('cards')[1][0].upper()}"
+            f"{servant.get('cards')[2][0].upper()}"
+            f"{servant.get('cards')[3][0].upper()}"
+            f"{servant.get('cards')[4][0].upper()}"
+        ))
+        embed.add_field(f"Skill 1: {skill1}", skill1desc)
+        embed.add_field(f"Skill 2: {skill2}", skill2desc)
+        embed.add_field(f"Skill 3: {skill3}", skill3desc)
+        for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
+            embed.add_field(
+                f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card')})",
+                noblePhantasm.get('detail')
+            )
+        pages.append(Page(f"{idx + 1}/{len(servants)}", embed))
+    
+    return pages
 
 
 def get_functions(type: str, target: str = ""):
@@ -145,14 +160,14 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
 
     Args:
         type (str): Effect 1
-        type2 (str, optional): Effect 2 (Optional)
+        type2 (str, optional): Effect 2
         flag (str, optional): "skill" for skills or "NP" for noble phantasm. Defaults to "skill".
         target (str): Effect target
         buffType1 (str): Buff effect 1 (only works if type is 'buff')
         buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
 
     Returns:
-        A list of servants who has skills/NP with the effects specified.
+        Pages of embeds containing the skills data.
     """
     found_list_1 = get_skills_with_type(type, flag, target)
     found_list_2 = get_skills_with_type(type2, flag, target)
@@ -208,6 +223,19 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     return pages
 
 def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
+    """Creates an embed object for the result data.
+
+    Args:
+        type (str): Effect 1
+        type2 (str, optional): Effect 2
+        flag (str, optional): "skill" for skills or "NP" for noble phantasm. Defaults to "skill".
+        target (str): Effect target
+        buffType1 (str): Buff effect 1 (only works if type is 'buff')
+        buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
+
+    Returns:
+        `interactions.Embed`: Embed object
+    """    
     embed = interactions.Embed(
         title=f"{'Skills' if flag == 'skill' else 'Noble Phantasms'}",
         description="",
@@ -229,6 +257,8 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
 
 
 def common_elements(*lists):
+    """Finds common elements in a list of lists
+    """    
     common_list = []
     for list in lists:
         if list == None:
@@ -249,8 +279,9 @@ def common_elements(*lists):
 @bot.command()
 @interactions.option(str, name="name", description="Servant name", required=True)
 async def servant(ctx: interactions.CommandContext, name: str):
-    await ctx.send(embeds=get_servant(name))
-
+    await ctx.defer()
+    pages = get_servant(name)
+    await send_paginator(ctx, pages)
 
 @bot.command(
     description="Search for servants with skills that matches the specified parameters",
@@ -335,7 +366,9 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
     Args:
         ctx (interactions.CommandContext): Application context
         pages (_type_): Result data
-    """    
+    """
+    if len(pages) == 0:
+        await ctx.send("No result.")
     if len(pages) == 1:
         await ctx.send(embeds=pages[0].embeds)
     elif len(pages) >= 2:
