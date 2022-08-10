@@ -1,14 +1,15 @@
 import configparser
-import requests
 import json
 import interactions
 from interactions.ext.paginator import Page, Paginator
+import requests_cache
 
 configparser = configparser.ConfigParser()
 configparser.read('env.config')
 token = configparser.get('Auth', 'TOKEN')
 bot = interactions.Client(token=token)
 
+session = requests_cache.CachedSession()
 
 def get_servant(name: str) -> interactions.Embed:
     """Gets the servant info based on the search query.
@@ -19,7 +20,7 @@ def get_servant(name: str) -> interactions.Embed:
     Returns:
         interactions.Embed: An embed discord object containing the servant info.
     """
-    response = requests.get(
+    response = session.get(
         "https://api.atlasacademy.io/nice/JP/servant/search?name=" + name)
     json_data = json.loads(response.text)
     skill1 = json_data[0].get('skills')[0].get('name')
@@ -67,7 +68,7 @@ def get_functions(type: str, target: str = ""):
     if target != "":
         targetQueryStr = f"&targetType={target}"
     url = f"https://api.atlasacademy.io/basic/JP/function/search?reverse=true&reverseDepth=servant&type={type}{targetQueryStr}"
-    response = requests.get(url)
+    response = session.get(url)
     functions = json.loads(response.text)
     return functions
 
@@ -76,7 +77,7 @@ def get_skills_from_functions(functions, flag: str = "skill"):
     found_skills = []
     for function in functions:
         for skill in function.get('reverse').get('basic').get(flag):
-            if skill.get('name') == "":
+            if skill.get('name') == "" or skill.get('type') == "passive":
                 continue
             servants = skill.get('reverse').get('basic').get('servant')
             servant_found = False
@@ -114,7 +115,7 @@ def get_skills_with_buff(buffType: str = "", flag: str = "skill"):
     if buffType == "":
         return None
     url = f"https://api.atlasacademy.io/basic/JP/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&type={buffType}"
-    response = requests.get(url)
+    response = session.get(url)
     buffs = json.loads(response.text)
     skills = []
     for buff in buffs:
@@ -128,9 +129,8 @@ def get_skill_details(id: str = "", flag: str = "skill"):
     if id == "":
         return None
     url = f"https://api.atlasacademy.io/nice/JP/{flag}/{id}"
-    response = requests.get(url)
-    skill = json.loads(response.text)
-    return skill
+    response = session.get(url)
+    return json.loads(response.text)
 
 
 def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
@@ -156,10 +156,13 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
 
     embeds = []
     embed = create_embed(type, type2, flag, target, buffType1, buffType2)
-    maxLimit = 20
+    maxLimit = 5
     pageCount = 0
     totalCount = 0
     for skill in matched_skills_list:
+        skillDetails = get_skill_details(skill.get('id'), flag)
+        if (skillDetails.get('type') == "passive"):
+            continue
         servants = skill.get('reverse').get('basic').get('servant')
         servantList = []
         for servant in servants:
