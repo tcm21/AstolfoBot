@@ -3,10 +3,15 @@ import json
 import interactions
 from interactions.ext.paginator import Page, Paginator
 import requests_cache
+import os
 
-configparser = configparser.ConfigParser()
-configparser.read('env.config')
-token = configparser.get('Auth', 'TOKEN')
+
+token = os.environ.get("TOKEN")
+if token == "" or token == None:
+    configparser = configparser.ConfigParser()
+    configparser.read('env.config')
+    token = configparser.get('Auth', 'TOKEN')
+
 bot = interactions.Client(
     token=token,
     default_scope=[760776452609802250]
