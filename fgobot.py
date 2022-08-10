@@ -14,6 +14,7 @@ if token == "" or token == None:
 
 bot = interactions.Client(
     token=token,
+    # default_scope=760776452609802250
 )
 
 session = requests_cache.CachedSession()
@@ -54,6 +55,7 @@ def get_servant(name: str) -> interactions.Embed:
         embed.add_field("Name", servant.get('name'))
         embed.add_field("Rarity", "★"*servant.get('rarity'))
         embed.add_field("Class", servant.get('className'))
+        embed.add_field("Attribute", servant.get('attribute'))
         embed.add_field("Cards", (
             f"{servant.get('cards')[0][0].upper()}"
             f"{servant.get('cards')[1][0].upper()}"
@@ -276,11 +278,13 @@ def common_elements(*lists):
 # Commands
 
 
-@bot.command()
-@interactions.option(str, name="name", description="Servant name", required=True)
-async def servant(ctx: interactions.CommandContext, name: str):
+@bot.command(
+    description="Servant info lookup",
+)
+@interactions.option(str, name="servant-name", description="Servant name", required=True)
+async def servant(ctx: interactions.CommandContext, servantName: str = ""):
     await ctx.defer()
-    pages = get_servant(name)
+    pages = get_servant(servantName)
     await send_paginator(ctx, pages)
 
 @bot.command(
