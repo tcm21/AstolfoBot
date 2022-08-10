@@ -7,7 +7,10 @@ import requests_cache
 configparser = configparser.ConfigParser()
 configparser.read('env.config')
 token = configparser.get('Auth', 'TOKEN')
-bot = interactions.Client(token=token)
+bot = interactions.Client(
+    token=token,
+    default_scope=[760776452609802250]
+)
 
 session = requests_cache.CachedSession()
 
@@ -239,16 +242,13 @@ def common_elements(*lists):
 # Commands
 
 
-@bot.command(
-    scope=[760776452609802250],
-)
+@bot.command()
 @interactions.option(str, name="name", description="Servant name", required=True)
 async def servant(ctx: interactions.CommandContext, name: str):
     await ctx.send(embeds=get_servant(name))
 
 
 @bot.command(
-    scope=[760776452609802250],
     description="Search for servants with skills that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
@@ -281,7 +281,6 @@ async def skill(
 
 
 @bot.command(
-    scope=[760776452609802250],
     description="Search for servants with NP that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
@@ -313,7 +312,6 @@ async def np(
         ).run()
 
 @bot.command(
-    scope=[760776452609802250],
     description="Search for servants with NP and/or skills that matches the specified parameters",
     name="skill-or-np"
 )
