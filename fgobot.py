@@ -2,6 +2,7 @@ import configparser
 import requests
 import json
 import interactions
+from interactions.ext.paginator import Page, Paginator
 
 configparser = configparser.ConfigParser()
 configparser.read('env.config')
@@ -153,8 +154,52 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     matched_skills_list = common_elements(
         found_list_1, found_list_2, found_buff_list1, found_buff_list2)
 
+    embeds = []
+    embed = create_embed(type, type2, flag, target, buffType1, buffType2)
+    maxLimit = 20
+    pageCount = 0
+    totalCount = 0
+    for skill in matched_skills_list:
+        servants = skill.get('reverse').get('basic').get('servant')
+        servantList = []
+        for servant in servants:
+            if (
+                servant.get('name') == "" or
+                (servant.get('type') != "normal" and servant.get('type')
+                 != "heroine")  # Mash has her own category lmao
+            ):
+                continue
+            servant_id = f"{servant.get('name')} {servant.get('className')}"
+            if servant_id not in servantList:
+                totalCount += 1
+                servantList.append(servant_id)
+                if pageCount >= maxLimit:
+                    embeds.append(embed)
+                    embed = create_embed(type, type2, flag, target, buffType1, buffType2)
+                    pageCount = 0
+                skillName = skill.get('name')
+                embed.add_field(
+                    f"{totalCount}: {servant.get('name')} {servant.get('className')}\n",
+                    (
+                        f"[{skillName}](https://apps.atlasacademy.io/db/JP/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
+                    )
+                )
+                pageCount += 1
+    
+    if (totalCount == 0):
+        embed.add_field("Not found.", "Try different parameters")
+    embeds.append(embed)
+    pages = []
+    cnt = 0
+    for resEmbed in embeds:
+        cnt += 1
+        pages.append(Page(f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}", resEmbed))
+
+    return pages
+
+def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
     embed = interactions.Embed(
-        title="Search results",
+        title=f"Find {flag}",
         description="",
         color=interactions.Color.blurple()
     )
@@ -169,48 +214,8 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
         embed.add_field("Buff 1", buff_names_json.get(buffType1), True)
     if buffType2 != "":
         embed.add_field("Buff 2", buff_names_json.get(buffType2), True)
-
-    maxLimit = 20
-    count = 0
-    for skill in matched_skills_list:
-        servants = skill.get('reverse').get('basic').get('servant')
-        servantList = []
-        for servant in servants:
-            if (
-                servant.get('name') == "" or
-                (servant.get('type') != "normal" and servant.get('type')
-                 != "heroine")  # Mash has her own category lmao
-            ):
-                continue
-            servant_id = servant.get('id')
-            if servant_id not in servantList:
-                servantList.append(servant_id)
-                if count >= maxLimit:
-                    count += 1
-                    continue
-                skillName = skill.get('name')
-                if flag == "NP":
-                    skillName += f" {skillDetails.get('rank')}"
-                skillDetails = get_skill_details(skill.get('id'), flag)
-                skillDetailedText = f"\n{skillDetails.get('detail')}"
-                embed.add_field(
-                    f"{servant.get('name')} {servant.get('className')}\n",
-                    (
-                        f"[{skillName}](https://apps.atlasacademy.io/db/JP/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
-                        f"{skillDetailedText}"
-                    )
-                )
-                count += 1
-
-    if count > 0:
-        extraText = ""
-        if (count > maxLimit):
-            extraText = f" Displaying first {maxLimit} results."
-        embed.title = f"Found {count} results.{extraText}"
-        return embed
-    else:
-        embed.add_field("Not found.", "Try different options")
-        return embed
+    
+    return embed
 
 
 def common_elements(*lists):
@@ -241,6 +246,7 @@ async def servant(ctx: interactions.CommandContext, name: str):
 
 @bot.command(
     scope=[760776452609802250],
+    description="Search for servants with skills that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
 @interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
@@ -260,12 +266,20 @@ async def skill(
         return
 
     await ctx.defer()
-    embed = get_skills(type, type2, "skill", target, buff, buff2)
-    await ctx.send(embeds=embed)
+    pages = get_skills(type, type2, "skill", target, buff, buff2)
+    if len(pages) == 1:
+        await ctx.send(embeds=pages[0].embeds)
+    elif len(pages) >= 2:
+        await Paginator(
+            client = bot,
+            ctx = ctx,
+            pages = pages,
+        ).run()
 
 
 @bot.command(
     scope=[760776452609802250],
+    description="Search for servants with NP that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
 @interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
@@ -285,8 +299,15 @@ async def np(
         return
 
     await ctx.defer()
-    embed = get_skills(type, type2, "NP", target, buff, buff2)
-    await ctx.send(embeds=embed)
+    pages = get_skills(type, type2, "NP", target, buff, buff2)
+    if len(pages) == 1:
+        await ctx.send(embeds=pages[0].embeds)
+    elif len(pages) >= 2:
+        await Paginator(
+            client = bot,
+            ctx = ctx,
+            pages = pages,
+        ).run()
 
 # Autocomplete functions
 with open('function_names.json') as fn_names:
