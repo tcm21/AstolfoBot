@@ -199,7 +199,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
 
 def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = ""):
     embed = interactions.Embed(
-        title=f"Find {flag}",
+        title=f"{'Skills' if flag == 'skill' else 'Noble Phantasms'}",
         description="",
         color=interactions.Color.blurple()
     )
@@ -309,6 +309,40 @@ async def np(
             pages = pages,
         ).run()
 
+@bot.command(
+    scope=[760776452609802250],
+    description="Search for servants with NP and/or skills that matches the specified parameters",
+    name="skill-or-np"
+)
+@interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
+@interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
+@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
+@interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
+@interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+async def skillOrNp(
+    ctx: interactions.CommandContext,
+    type: str = "",
+    type2: str = "",
+    target: str = "",
+    buff: str = "",
+    buff2: str = "",
+):
+    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
+        await ctx.send("Invalid input.")
+        return
+
+    await ctx.defer()
+    pages = get_skills(type, type2, "skill", target, buff, buff2)
+    pages.extend(get_skills(type, type2, "NP", target, buff, buff2))
+    if len(pages) == 1:
+        await ctx.send(embeds=pages[0].embeds)
+    elif len(pages) >= 2:
+        await Paginator(
+            client = bot,
+            ctx = ctx,
+            pages = pages,
+        ).run()
+
 # Autocomplete functions
 with open('function_names.json') as fn_names:
     fn_names_json = json.load(fn_names)
@@ -361,30 +395,35 @@ def populateBuffList(input_value: str):
 
 @bot.autocomplete(command="skill", name="type")
 @bot.autocomplete(command="np", name="type")
+@bot.autocomplete(command="skill-or-np", name="type")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
     await ctx.populate(populateSkillNamesList(type))
 
 
 @bot.autocomplete(command="skill", name="type2")
 @bot.autocomplete(command="np", name="type2")
+@bot.autocomplete(command="skill-or-np", name="type2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
     await ctx.populate(populateSkillNamesList(type2))
 
 
 @bot.autocomplete(command="skill", name="target")
 @bot.autocomplete(command="np", name="target")
+@bot.autocomplete(command="skill-or-np", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
     await ctx.populate(populateTargetList(target))
 
 
 @bot.autocomplete(command="skill", name="buff")
 @bot.autocomplete(command="np", name="buff")
+@bot.autocomplete(command="skill-or-np", name="buff")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str = ""):
     await ctx.populate(populateBuffList(buff))
 
 
 @bot.autocomplete(command="skill", name="buff2")
 @bot.autocomplete(command="np", name="buff2")
+@bot.autocomplete(command="skill-or-np", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
     await ctx.populate(populateBuffList(buff2))
 
