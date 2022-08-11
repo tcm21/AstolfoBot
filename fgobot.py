@@ -4,6 +4,7 @@ import interactions
 from interactions.ext.paginator import Page, Paginator
 import requests_cache
 import os
+import re
 
 token = os.environ.get("TOKEN")
 if token == "" or token == None:
@@ -29,7 +30,7 @@ def get_servant(name: str, region: str = "JP") -> interactions.Embed:
         list: servants object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/servant/search?name={name}")
+        f"https://api.atlasacademy.io/basic/{region}/servant/search?name={name}")
     servants = json.loads(response.text)
     if not isinstance(servants, list) or len(servants) == 0:
         return []
@@ -48,7 +49,7 @@ def get_servant_by_id(id: int, region: str = "JP"):
         Servant object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/servant/{id}")
+        f"https://api.atlasacademy.io/nice/{region}/servant/{id}?lore=true")
     servant = json.loads(response.text)
     if servant.get('detail') == "Svt not found":
         return None
@@ -73,17 +74,35 @@ def create_servant_pages(servant):
         .get('1')
     )
 
-    embed.add_field("Name", servant.get('name'))
-    embed.add_field("Rarity", "★"*servant.get('rarity'))
-    embed.add_field("Class", servant.get('className').capitalize())
-    embed.add_field("Attribute", servant.get('attribute').capitalize())
+    embed.add_field("Name", servant.get('name'), True)
+    embed.add_field("Rarity", "★"*servant.get('rarity'), True)
+    embed.add_field("Class", servant.get('className').capitalize(), True)
+    embed.add_field("Attribute", servant.get('attribute').capitalize(), True)
     embed.add_field("Cards", (
         f"{servant.get('cards')[0][0].upper()}"
         f"{servant.get('cards')[1][0].upper()}"
         f"{servant.get('cards')[2][0].upper()}"
         f"{servant.get('cards')[3][0].upper()}"
         f"{servant.get('cards')[4][0].upper()}"
-    ))
+    ), True)
+    traits = servant.get("traits")
+    alignments = []
+    otherTraits = []
+    for trait in traits:
+        if (str(trait.get("id"))[0] == "3" and len(str(trait.get("id"))) == 3):
+            alignments.append(getEnumName(trait.get("name").replace("alignment", "")))
+        if (str(trait.get("id"))[0] == "2" and len(str(trait.get("id"))) == 4):
+            otherTraits.append(getEnumName(trait.get("name")))
+
+    if len(alignments) > 0:
+        embed.add_field("Alignments", " ".join(alignments), True)
+    
+    if len(otherTraits) > 0:
+        embed.add_field("Traits", ", ".join(otherTraits))
+
+    embed.add_field("CV", servant.get("profile").get("cv"), True)
+    embed.add_field("Illustrator", servant.get("profile").get("illustrator"), True)
+
     pages.append(Page(f"Basic Info", embed))
 
     # Skills
@@ -91,6 +110,13 @@ def create_servant_pages(servant):
         title="Skills",
         description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
         color=interactions.Color.blurple()
+    )
+    embed.set_thumbnail(
+        url=servant
+        .get('extraAssets')
+        .get('faces')
+        .get('ascension')
+        .get('1')
     )
 
     # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
@@ -104,6 +130,13 @@ def create_servant_pages(servant):
         title="Noble Phantasms",
         description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
         color=interactions.Color.blurple()
+    )
+    embed.set_thumbnail(
+        url=servant
+        .get('extraAssets')
+        .get('faces')
+        .get('ascension')
+        .get('1')
     )
     for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
         embed.add_field(
@@ -147,8 +180,8 @@ def get_skills_from_functions(functions, flag: str = "skill"):
             servant_found = False
             for servant in servants:
                 if (servant.get('name') == "" or
-                    servant.get('type') == "servantEquip" or
-                    servant.get('type') == "enemy"
+                        servant.get('type') == "servantEquip" or
+                        servant.get('type') == "enemy"
                     ):
                     continue
                 servant_found = True
@@ -221,7 +254,8 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
         found_list_1, found_list_2, found_buff_list1, found_buff_list2)
 
     embeds = []
-    embed = create_embed(type, type2, flag, target, buffType1, buffType2)
+    embed = create_embed(type, type2, flag, target,
+                         buffType1, buffType2, region)
     maxLimit = 5
     pageCount = 0
     totalCount = 0
@@ -245,7 +279,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                 if pageCount >= maxLimit:
                     embeds.append(embed)
                     embed = create_embed(
-                        type, type2, flag, target, buffType1, buffType2)
+                        type, type2, flag, target, buffType1, buffType2, region)
                     pageCount = 0
                 skillName = skill.get('name')
                 embed.add_field(
@@ -291,15 +325,15 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     )
 
     if type != "":
-        embed.add_field("Type 1", fn_names_json.get(type), True)
+        embed.add_field("Type 1", getEnumName(type), True)
     if type2 != "":
-        embed.add_field("Type 2", fn_names_json.get(type2), True)
+        embed.add_field("Type 2", getEnumName(type2), True)
     if target != "":
-        embed.add_field("Target", tg_names_json.get(target), True)
+        embed.add_field("Target", getEnumName(target), True)
     if buffType1 != "":
-        embed.add_field("Buff 1", buff_names_json.get(buffType1), True)
+        embed.add_field("Buff 1", getEnumName(buffType1), True)
     if buffType2 != "":
-        embed.add_field("Buff 2", buff_names_json.get(buffType2), True)
+        embed.add_field("Buff 2", getEnumName(buffType2), True)
     if region != "":
         embed.add_field("Region", region, True)
 
@@ -336,7 +370,8 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", regio
     if servants == None or len(servants) == 0:
         await ctx.send("Not found.")
     if len(servants) == 1:
-        pages = create_servant_pages(servants[0])
+        servant = get_servant_by_id(servants.get("id"))
+        pages = create_servant_pages(servant)
         await send_paginator(ctx, pages)
     else:
         options = []
@@ -459,54 +494,52 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
             pages=pages,
         ).run()
 
+
 # Autocomplete functions
-with open('function_names.json') as fn_names:
-    fn_names_json = json.load(fn_names)
+def get_enums(enum_type: str):
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_enums.json")
+    enums = json.loads(response.text)
+    return enums.get(enum_type)
 
-with open('target_names.json') as tg_names:
-    tg_names_json = json.load(tg_names)
 
-with open('buff_names.json') as buff_names:
-    buff_names_json = json.load(buff_names)
+def get_traits():
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_trait.json")
+    return json.loads(response.text)
+
+
+def getEnumName(string):
+    if string != '':
+        result = re.sub('([A-Z0-9])', r' \1', string)
+        return (result[:1].upper() + result[1:].lower()).title()
+    return
+
+
+def populateList(enumName: str, input_value: str):
+    fnEnums = get_enums(enumName)
+    options = fnEnums.values()
+    filteredOptions = [
+        option for option in options
+        if (input_value.upper() in option.upper() or input_value.upper() in getEnumName(option).upper())
+    ]
+    choices = []
+    for option in filteredOptions[0:24]:
+        text = getEnumName(option)
+        choices.append(interactions.Choice(name=text, value=option))
+    return choices
 
 
 def populateSkillNamesList(input_value: str):
-    options = fn_names_json.keys()
-    filteredOptions = [
-        option for option in options
-        if (input_value.upper() in option.upper() or input_value.upper() in fn_names_json.get(option, option).upper())
-    ]
-    choices = []
-    for option in filteredOptions[0:24]:
-        text = fn_names_json.get(option, option)
-        choices.append(interactions.Choice(name=text, value=option))
-    return choices
+    return populateList("NiceFuncType", input_value)
 
 
 def populateTargetList(input_value: str):
-    options = tg_names_json.keys()
-    filteredOptions = [
-        option for option in options
-        if (input_value.upper() in option.upper() or input_value.upper() in tg_names_json.get(option, option).upper())
-    ]
-    choices = []
-    for option in filteredOptions[0:24]:
-        text = tg_names_json.get(option, option)
-        choices.append(interactions.Choice(name=text, value=option))
-    return choices
+    return populateList("NiceFuncTargetType", input_value)
 
 
 def populateBuffList(input_value: str):
-    options = buff_names_json.keys()
-    filteredOptions = [
-        option for option in options
-        if (input_value.upper() in option.upper() or input_value.upper() in buff_names_json.get(option, option).upper())
-    ]
-    choices = []
-    for option in filteredOptions[0:24]:
-        text = buff_names_json.get(option, option)
-        choices.append(interactions.Choice(name=text, value=option))
-    return choices
+    return populateList("NiceBuffType", input_value)
 
 
 @bot.autocomplete(command="skill", name="type")
