@@ -12,7 +12,6 @@ When developing, use your own env.config file or set TOKEN in the environment va
 TOKEN=<your token here>
 ```
 ### To-do list
-* Search by super effective damage against certain traits
 * Search by effects granted by skills during NP (e.g Miyu's NP)
 * Search servants by traits
 * ...

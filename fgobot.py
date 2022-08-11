@@ -96,18 +96,20 @@ def create_servant_pages(servant):
     otherTraits = []
     for trait in traits:
         if (str(trait.get("id"))[0] == "3" and len(str(trait.get("id"))) == 3):
-            alignments.append(getEnumName(trait.get("name").replace("alignment", "")))
+            alignments.append(getEnumName(
+                trait.get("name").replace("alignment", "")))
         if (str(trait.get("id"))[0] == "2" and len(str(trait.get("id"))) == 4):
             otherTraits.append(getEnumName(trait.get("name")))
 
     if len(alignments) > 0:
         embed.add_field("Alignments", " ".join(alignments), True)
-    
+
     if len(otherTraits) > 0:
         embed.add_field("Traits", ", ".join(otherTraits))
 
     embed.add_field("CV", servant.get("profile").get("cv"), True)
-    embed.add_field("Illustrator", servant.get("profile").get("illustrator"), True)
+    embed.add_field("Illustrator", servant.get(
+        "profile").get("illustrator"), True)
 
     pages.append(Page(f"Basic Info", embed))
 
@@ -176,6 +178,29 @@ def get_functions(type: str, target: str = "", region: str = "JP"):
     return functions
 
 
+def get_functions_by_trait(trait: str, target: str = "", region: str = "JP"):
+    """Gets all the effects (functions) with the specified trait effect.
+
+    Args:
+        trait (str): Trait ID
+        target (str): Effect target
+        region (str): Region (Default: JP)
+
+    Returns:
+        A list of functions with the specified effect.
+    """
+    if trait == "":
+        return []
+    targetQueryStr = ""
+    if target != "":
+        targetQueryStr = f"&targetType={target}"
+
+    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&tvals={trait}{targetQueryStr}"
+    response = session.get(url)
+    functions = json.loads(response.text)
+    return functions
+
+
 def get_skills_from_functions(functions, flag: str = "skill"):
     found_skills = []
     for function in functions:
@@ -186,9 +211,9 @@ def get_skills_from_functions(functions, flag: str = "skill"):
             servant_found = False
             for servant in servants:
                 if (servant.get('name') == "" or
-                        servant.get('type') == "servantEquip" or
-                        servant.get('type') == "enemy"
-                    ):
+                            servant.get('type') == "servantEquip" or
+                            servant.get('type') == "enemy"
+                        ):
                     continue
                 servant_found = True
             if servant_found:
@@ -215,6 +240,35 @@ def get_skills_with_type(type: str, flag: str = "skill", target: str = "", regio
     return found_skills
 
 
+def get_skills_with_trait(trait: str, flag: str = "skill", target: str = "", region: str = "JP"):
+    """Get a list of skills or NP that are effective against the specified trait.
+
+    Args:
+        trait (str): Trait ID
+        flag (str, optional): "skill" or "NP". Defaults to "skill".
+        target (str): Effect target
+        region (str): Region (Default: JP)
+
+    Returns:
+        A list of skill objects with the specified effect.
+    """
+    if flag == "skill":
+        functions = get_functions_by_trait(trait, target, region)
+        found_skills = get_skills_from_functions(functions, flag)
+        return found_skills
+    elif flag == "NP":
+        found_nps = get_nps_with_trait(trait, region)
+        return found_nps
+    return None
+
+
+def get_nps_with_trait(trait: str, region: str = "JP"):
+    url = f"https://api.atlasacademy.io/basic/{region}/NP/search?svalsContain={trait}&reverse=true"
+    response = session.get(url)
+    nps = json.loads(response.text)
+    return nps
+
+
 def get_skills_with_buff(buffType: str = "", flag: str = "skill", region: str = "JP"):
     if buffType == "":
         return None
@@ -237,7 +291,16 @@ def get_skill_details(id: str = "", flag: str = "skill", region: str = "JP"):
     return json.loads(response.text)
 
 
-def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", region: str = "JP"):
+def get_skills(
+    type: str = "",
+    type2: str = "",
+    flag: str = "skill",
+    target: str = "",
+    buffType1: str = "",
+    buffType2: str = "",
+    trait: str = "",
+    region: str = "JP"
+):
     """Get skills or noble phantasms with the selected effects.
 
     Args:
@@ -245,8 +308,9 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
         type2 (str, optional): Effect 2
         flag (str, optional): "skill" for skills or "NP" for noble phantasm. Defaults to "skill".
         target (str): Effect target
-        buffType1 (str): Buff effect 1 (only works if type is 'buff')
-        buffType2 (str): Buff effect 2 (only works if type2 is 'buff')
+        buffType1 (str): Buff effect 1
+        buffType2 (str): Buff effect 2
+        trait (str): Affected trait
         region (str): Region (Default: JP)
 
     Returns:
@@ -256,12 +320,14 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     found_list_2 = get_skills_with_type(type2, flag, target, region)
     found_buff_list1 = get_skills_with_buff(buffType1, flag, region)
     found_buff_list2 = get_skills_with_buff(buffType2, flag, region)
+    found_trait_list = get_skills_with_trait(trait, flag, target, region)
     matched_skills_list = common_elements(
-        found_list_1, found_list_2, found_buff_list1, found_buff_list2)
+        found_list_1, found_list_2, found_buff_list1, found_buff_list2, found_trait_list
+    )
 
     embeds = []
     embed = create_embed(type, type2, flag, target,
-                         buffType1, buffType2, region)
+                         buffType1, buffType2, trait, region)
     maxLimit = 5
     pageCount = 0
     totalCount = 0
@@ -285,7 +351,7 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
                 if pageCount >= maxLimit:
                     embeds.append(embed)
                     embed = create_embed(
-                        type, type2, flag, target, buffType1, buffType2, region)
+                        type, type2, flag, target, buffType1, buffType2, trait, region)
                     pageCount = 0
                 skillName = skill.get('name')
                 embed.add_field(
@@ -304,12 +370,12 @@ def get_skills(type: str = "", type2: str = "", flag: str = "skill", target: str
     for resEmbed in embeds:
         cnt += 1
         pages.append(Page(
-            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}", resEmbed))
+            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}" if totalCount > 0 else "", resEmbed))
 
     return pages
 
 
-def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", region: str = "JP"):
+def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: str = "", buffType1: str = "", buffType2: str = "", trait: str = "", region: str = "JP"):
     """Creates an embed object for the result data.
 
     Args:
@@ -340,6 +406,8 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
         embed.add_field("Buff 1", getEnumName(buffType1), True)
     if buffType2 != "":
         embed.add_field("Buff 2", getEnumName(buffType2), True)
+    if trait != "":
+        embed.add_field("Affected Trait", getEnumName(get_traits()[trait]), True)
     if region != "":
         embed.add_field("Region", region, True)
 
@@ -375,7 +443,7 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", cv: s
     if servantName == "" and cv == "":
         await ctx.send("Invalid input.")
         return
-        
+
     await ctx.defer()
     servants = get_servant(servantName, cv, region)
     if servants == None or len(servants) == 0:
@@ -389,7 +457,7 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", cv: s
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})",value=f"{servant.get('id')}:{region}"))
+                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})", value=f"{servant.get('id')}:{region}"))
         selectMenu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
@@ -426,6 +494,7 @@ async def select_response(ctx, value=[]):
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def skill(
     ctx: interactions.CommandContext,
@@ -434,14 +503,15 @@ async def skill(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    trait: str = "",
     region: str = "JP",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
+    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2, region)
+    pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
     await send_paginator(ctx, pages)
 
 
@@ -453,6 +523,7 @@ async def skill(
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def np(
     ctx: interactions.CommandContext,
@@ -461,14 +532,15 @@ async def np(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    trait: str = "",
     region: str = "JP",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
+    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "NP", target, buff, buff2, region)
+    pages = get_skills(type, type2, "NP", target, buff, buff2, trait, region)
     await send_paginator(ctx, pages)
 
 
@@ -481,6 +553,7 @@ async def np(
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
 @interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
 @interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
+@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def skillOrNp(
     ctx: interactions.CommandContext,
@@ -489,15 +562,16 @@ async def skillOrNp(
     target: str = "",
     buff: str = "",
     buff2: str = "",
+    trait: str = "",
     region: str = "JP",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == ""):
+    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2, region)
-    pages.extend(get_skills(type, type2, "NP", target, buff, buff2, region))
+    pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
+    pages.extend(get_skills(type, type2, "NP", target, buff, buff2, trait, region))
     await send_paginator(ctx, pages)
 
 
@@ -523,14 +597,14 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
 # Autocomplete functions
 def get_enums(enum_type: str):
     response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_enums.json") # JP and NA use the same enums
+        f"https://api.atlasacademy.io/export/JP/nice_enums.json")  # JP and NA use the same enums
     enums = json.loads(response.text)
     return enums.get(enum_type)
 
 
 def get_traits():
     response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_trait.json") # JP and NA use the same enums
+        f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
     return json.loads(response.text)
 
 
@@ -566,18 +640,36 @@ def populate_targets(input_value: str):
 def populate_buffs(input_value: str):
     return populate_enum_list("NiceBuffType", input_value)
 
+
+def populate_traits(input_value: str):
+    traits = get_traits()
+    # Traits ID which starts with 2 and has 4 digits
+    filteredTraits = dict(filter(lambda elem:
+        str(elem[0])[0] == "2" and
+        len(str(elem[0])) == 4 and
+        (input_value.upper() in elem[1].upper() or input_value.upper() in getEnumName(elem[1]).upper()),
+        traits.items()
+        )
+    )
+    choices = []
+    for trait in list(filteredTraits.items())[:24]:
+        text = getEnumName(trait[1])
+        choices.append(interactions.Choice(name=text, value=trait[0]))
+    return choices
+
 # Load CV list
 session = requests_cache.CachedSession()
 response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_cv.json")
+    f"https://api.atlasacademy.io/export/JP/nice_cv.json")
 cv_list_jp = json.loads(response.text)
 response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_cv_lang_en.json")
+    f"https://api.atlasacademy.io/export/JP/nice_cv_lang_en.json")
 cv_list_jp_en = json.loads(response.text)
 cv_list = {}
 for cv_jp in cv_list_jp:
     cv_en = next(cv for cv in cv_list_jp_en if cv.get("id") == cv_jp.get("id"))
     cv_list[cv_jp.get("id")] = f"{cv_jp.get('name')} ({cv_en.get('name')})"
+
 
 def populate_cv(input_value: str):
     matched_cvs = [
@@ -593,7 +685,8 @@ def get_cv_name(cv_id: str, region: str = "JP"):
     if region == "JP":
         cv_name = next(cv for cv in cv_list_jp if cv.get("id") == int(cv_id))
     elif region == "NA":
-        cv_name = next(cv for cv in cv_list_jp_en if cv.get("id") == int(cv_id))
+        cv_name = next(
+            cv for cv in cv_list_jp_en if cv.get("id") == int(cv_id))
     return cv_name.get('name')
 
 
@@ -647,5 +740,11 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str
     choices.append(interactions.Choice(name="JP", value="JP"))
     await ctx.populate(choices)
 
+
+@bot.autocomplete(command="skill", name="trait")
+@bot.autocomplete(command="np", name="trait")
+@bot.autocomplete(command="skill-or-np", name="trait")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
+    await ctx.populate(populate_traits(trait))
 
 bot.start()
