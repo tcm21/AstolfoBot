@@ -1,10 +1,11 @@
 import configparser
 import json
 import interactions
-from interactions.ext.paginator import Page, Paginator
 import requests_cache
 import os
 import re
+
+from interactions.ext.paginator import Page, Paginator
 
 token = os.environ.get("TOKEN")
 if token == "" or token == None:
@@ -19,7 +20,7 @@ bot = interactions.Client(
 session = requests_cache.CachedSession()
 
 
-def get_servant(name: str = "", cv_id: str = "", region: str = "JP") -> interactions.Embed:
+def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP") -> interactions.Embed:
     """Gets the servant info based on the search query.
 
     Args:
@@ -31,12 +32,15 @@ def get_servant(name: str = "", cv_id: str = "", region: str = "JP") -> interact
     """
     nameQuery = ""
     cvQuery = ""
+    clsNameQuery = ""
     if (name != ""):
         nameQuery = f"name={name}"
     if (cv_id != ""):
         cvQuery = f"&cv={get_cv_name(cv_id, region)}"
+    if class_name != "":
+        clsNameQuery= f"&className={class_name}"
     response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}")
+        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}{clsNameQuery}")
     servants = json.loads(response.text)
     if not isinstance(servants, list) or len(servants) == 0:
         return []
@@ -96,10 +100,10 @@ def create_servant_pages(servant):
     otherTraits = []
     for trait in traits:
         if (str(trait.get("id"))[0] == "3" and len(str(trait.get("id"))) == 3):
-            alignments.append(getEnumName(
+            alignments.append(title_case(
                 trait.get("name").replace("alignment", "")))
         if (str(trait.get("id"))[0] == "2" and len(str(trait.get("id"))) == 4):
-            otherTraits.append(getEnumName(trait.get("name")))
+            otherTraits.append(title_case(trait.get("name")))
 
     if len(alignments) > 0:
         embed.add_field("Alignments", " ".join(alignments), True)
@@ -397,17 +401,17 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     )
 
     if type != "":
-        embed.add_field("Type 1", getEnumName(type), True)
+        embed.add_field("Type 1", title_case(type), True)
     if type2 != "":
-        embed.add_field("Type 2", getEnumName(type2), True)
+        embed.add_field("Type 2", title_case(type2), True)
     if target != "":
-        embed.add_field("Target", getEnumName(target), True)
+        embed.add_field("Target", title_case(target), True)
     if buffType1 != "":
-        embed.add_field("Buff 1", getEnumName(buffType1), True)
+        embed.add_field("Buff 1", title_case(buffType1), True)
     if buffType2 != "":
-        embed.add_field("Buff 2", getEnumName(buffType2), True)
+        embed.add_field("Buff 2", title_case(buffType2), True)
     if trait != "":
-        embed.add_field("Affected Trait", getEnumName(get_traits()[trait]), True)
+        embed.add_field("Affected Trait", title_case(get_traits()[trait]), True)
     if region != "":
         embed.add_field("Region", region, True)
 
@@ -438,14 +442,21 @@ def common_elements(*lists):
 )
 @interactions.option(str, name="servant-name", description="Servant name", required=False)
 @interactions.option(str, name="cv", description="CV", required=False, autocomplete=True)
+@interactions.option(str, name="class-name", description="Class name", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def servant(ctx: interactions.CommandContext, servantName: str = "", cv: str = "", region: str = "JP"):
-    if servantName == "" and cv == "":
+async def servant(
+    ctx: interactions.CommandContext,
+    servantName: str = "",
+    cv: str = "",
+    className: str = "",
+    region: str = "JP"
+):
+    if servantName == "" and cv == "" and className == "":
         await ctx.send("Invalid input.")
         return
 
     await ctx.defer()
-    servants = get_servant(servantName, cv, region)
+    servants = get_servant(servantName, cv, className, region)
     if servants == None or len(servants) == 0:
         await ctx.send("Not found.")
         return
@@ -472,6 +483,8 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", cv: s
             embed.add_field("Servant name", servantName, True)
         if cv != "":
             embed.add_field("CV", get_cv_name(cv, region), True)
+        if className != "":
+            embed.add_field("Class", title_case(className), True)
         if region != "":
             embed.add_field("Region", region, True)
         await ctx.send(content=None, components=selectMenu, embeds=embed)
@@ -608,11 +621,13 @@ def get_traits():
     return json.loads(response.text)
 
 
-def getEnumName(string):
-    if string != '':
-        result = re.sub('([A-Z0-9])', r' \1', string)
-        return (result[:1].upper() + result[1:].lower()).title()
-    return
+def title_case(string):
+    if (string == ""):
+        return
+    words = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', string)).split()
+    if len(words) > 0:
+        words[0] = words[0][0].upper() + words[0][1:]
+    return " ".join(words)
 
 
 def populate_enum_list(enumName: str, input_value: str):
@@ -620,25 +635,13 @@ def populate_enum_list(enumName: str, input_value: str):
     options = fnEnums.values()
     filteredOptions = [
         option for option in options
-        if (input_value.upper() in option.upper() or input_value.upper() in getEnumName(option).upper())
+        if (input_value.upper() in option.upper() or input_value.upper() in title_case(option).upper())
     ]
     choices = []
     for option in filteredOptions[0:24]:
-        text = getEnumName(option)
+        text = title_case(option)
         choices.append(interactions.Choice(name=text, value=option))
     return choices
-
-
-def populate_skill_names(input_value: str):
-    return populate_enum_list("NiceFuncType", input_value)
-
-
-def populate_targets(input_value: str):
-    return populate_enum_list("NiceFuncTargetType", input_value)
-
-
-def populate_buffs(input_value: str):
-    return populate_enum_list("NiceBuffType", input_value)
 
 
 def populate_traits(input_value: str):
@@ -647,13 +650,13 @@ def populate_traits(input_value: str):
     filteredTraits = dict(filter(lambda elem:
         str(elem[0])[0] == "2" and
         len(str(elem[0])) == 4 and
-        (input_value.upper() in elem[1].upper() or input_value.upper() in getEnumName(elem[1]).upper()),
+        (input_value.upper() in elem[1].upper() or input_value.upper() in title_case(elem[1]).upper()),
         traits.items()
         )
     )
     choices = []
     for trait in list(filteredTraits.items())[:24]:
-        text = getEnumName(trait[1])
+        text = title_case(trait[1])
         choices.append(interactions.Choice(name=text, value=trait[0]))
     return choices
 
@@ -695,39 +698,44 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = "
     await ctx.populate(populate_cv(cv))
 
 
+@bot.autocomplete(command="servant", name="class-name")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, className: str = ""):
+    await ctx.populate(populate_enum_list("SvtClass", className))
+
+
 @bot.autocomplete(command="skill", name="type")
 @bot.autocomplete(command="np", name="type")
 @bot.autocomplete(command="skill-or-np", name="type")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
-    await ctx.populate(populate_skill_names(type))
+    await ctx.populate(populate_enum_list("NiceFuncType", type))
 
 
 @bot.autocomplete(command="skill", name="type2")
 @bot.autocomplete(command="np", name="type2")
 @bot.autocomplete(command="skill-or-np", name="type2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
-    await ctx.populate(populate_skill_names(type2))
+    await ctx.populate(populate_enum_list("NiceFuncType", type2))
 
 
 @bot.autocomplete(command="skill", name="target")
 @bot.autocomplete(command="np", name="target")
 @bot.autocomplete(command="skill-or-np", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    await ctx.populate(populate_targets(target))
+    await ctx.populate(populate_enum_list("NiceFuncTargetType", target))
 
 
 @bot.autocomplete(command="skill", name="buff")
 @bot.autocomplete(command="np", name="buff")
 @bot.autocomplete(command="skill-or-np", name="buff")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str = ""):
-    await ctx.populate(populate_buffs(buff))
+    await ctx.populate(populate_enum_list("NiceBuffType", buff))
 
 
 @bot.autocomplete(command="skill", name="buff2")
 @bot.autocomplete(command="np", name="buff2")
 @bot.autocomplete(command="skill-or-np", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
-    await ctx.populate(populate_buffs(buff2))
+    await ctx.populate(populate_enum_list("NiceBuffType", buff2))
 
 
 @bot.autocomplete(command="servant", name="region")
