@@ -117,36 +117,38 @@ def create_servant_pages(servant):
     pages.append(Page(f"Basic Info", embed))
 
     # Skills
-    embed = interactions.Embed(
-        title="Skills",
-        description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
-        color=interactions.Color.blurple()
-    )
-    embed.set_thumbnail(
-        url=faceAssetUrl
-    )
+    if len(servant.get('skills')) > 0:
+        embed = interactions.Embed(
+            title="Skills",
+            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            color=interactions.Color.blurple()
+        )
+        embed.set_thumbnail(
+            url=faceAssetUrl
+        )
 
-    # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
-    for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
-        embed.add_field(
-            f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
-    pages.append(Page(f"Skills", embed))
+        # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
+        for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
+            embed.add_field(
+                f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
+        pages.append(Page(f"Skills", embed))
 
     # NPs
-    embed = interactions.Embed(
-        title="Noble Phantasms",
-        description=f"{servant.get('name')} ({servant.get('className').capitalize()})",
-        color=interactions.Color.blurple()
-    )
-    embed.set_thumbnail(
-        url=faceAssetUrl
-    )
-    for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
-        embed.add_field(
-            f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})",
-            noblePhantasm.get('detail')
+    if len(servant.get("noblePhantasms")) > 0:
+        embed = interactions.Embed(
+            title="Noble Phantasms",
+            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            color=interactions.Color.blurple()
         )
-    pages.append(Page(f"Noble Phantasms", embed))
+        embed.set_thumbnail(
+            url=faceAssetUrl
+        )
+        for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
+            embed.add_field(
+                f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})",
+                noblePhantasm.get('detail')
+            )
+        pages.append(Page(f"Noble Phantasms", embed))
 
     return pages
 
