@@ -76,12 +76,11 @@ def create_servant_pages(servant):
         description="",
         color=interactions.Color.blurple()
     )
+    faceAssetUrl = servant.get('extraAssets').get('faces').get('ascension').get('1')
+    if faceAssetUrl == None:
+        faceAssetUrl = servant.get('extraAssets').get('faces').get('ascension').get('0')
     embed.set_thumbnail(
-        url=servant
-        .get('extraAssets')
-        .get('faces')
-        .get('ascension')
-        .get('1')
+        url=faceAssetUrl
     )
 
     embed.add_field("Name", servant.get('name'), True)
@@ -124,11 +123,7 @@ def create_servant_pages(servant):
         color=interactions.Color.blurple()
     )
     embed.set_thumbnail(
-        url=servant
-        .get('extraAssets')
-        .get('faces')
-        .get('ascension')
-        .get('1')
+        url=faceAssetUrl
     )
 
     # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
@@ -144,11 +139,7 @@ def create_servant_pages(servant):
         color=interactions.Color.blurple()
     )
     embed.set_thumbnail(
-        url=servant
-        .get('extraAssets')
-        .get('faces')
-        .get('ascension')
-        .get('1')
+        url=faceAssetUrl
     )
     for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
         embed.add_field(
