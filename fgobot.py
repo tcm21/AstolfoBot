@@ -602,6 +602,13 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = "
     await ctx.populate(populate_cv(cv))
 
 
+@bot.autocomplete(command="skill", name="type")
+@bot.autocomplete(command="np", name="type")
+@bot.autocomplete(command="skill-or-np", name="type")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
+    await ctx.populate(populate_skill_names(type))
+
+
 @bot.autocomplete(command="skill", name="type2")
 @bot.autocomplete(command="np", name="type2")
 @bot.autocomplete(command="skill-or-np", name="type2")
