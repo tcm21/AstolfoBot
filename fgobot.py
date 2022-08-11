@@ -370,14 +370,14 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", regio
     if servants == None or len(servants) == 0:
         await ctx.send("Not found.")
     if len(servants) == 1:
-        servant = get_servant_by_id(servants.get("id"))
+        servant = get_servant_by_id(servants[0].get("id"), region)
         pages = create_servant_pages(servant)
         await send_paginator(ctx, pages)
     else:
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})", value=servant.get("id")))
+                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})",value=f"{servant.get('id')}:{region}"))
         selectMenu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
@@ -388,7 +388,9 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", regio
 
 @bot.component("menu_component")
 async def select_response(ctx, value=[]):
-    servant = get_servant_by_id(value[0])
+    id = value[0].split(":")[0]
+    region = value[0].split(":")[1]
+    servant = get_servant_by_id(id, region)
     pages = create_servant_pages(servant)
     await send_paginator(ctx, pages)
 
