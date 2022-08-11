@@ -19,7 +19,7 @@ bot = interactions.Client(
 session = requests_cache.CachedSession()
 
 
-def get_servant(name: str, region: str = "JP") -> interactions.Embed:
+def get_servant(name: str = "", cv_id: str = "", region: str = "JP") -> interactions.Embed:
     """Gets the servant info based on the search query.
 
     Args:
@@ -29,8 +29,14 @@ def get_servant(name: str, region: str = "JP") -> interactions.Embed:
     Returns:
         list: servants object
     """
+    nameQuery = ""
+    cvQuery = ""
+    if (name != ""):
+        nameQuery = f"name={name}"
+    if (cv_id != ""):
+        cvQuery = f"&cv={get_cv_name(cv_id, region)}"
     response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/servant/search?name={name}")
+        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}")
     servants = json.loads(response.text)
     if not isinstance(servants, list) or len(servants) == 0:
         return []
@@ -362,13 +368,19 @@ def common_elements(*lists):
 @bot.command(
     description="Servant info lookup",
 )
-@interactions.option(str, name="servant-name", description="Servant name", required=True)
+@interactions.option(str, name="servant-name", description="Servant name", required=False)
+@interactions.option(str, name="cv", description="CV", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def servant(ctx: interactions.CommandContext, servantName: str = "", region: str = "JP"):
+async def servant(ctx: interactions.CommandContext, servantName: str = "", cv: str = "", region: str = "JP"):
+    if servantName == "" and cv == "":
+        await ctx.send("Invalid input.")
+        return
+        
     await ctx.defer()
-    servants = get_servant(servantName, region)
+    servants = get_servant(servantName, cv, region)
     if servants == None or len(servants) == 0:
         await ctx.send("Not found.")
+        return
     if len(servants) == 1:
         servant = get_servant_by_id(servants[0].get("id"), region)
         pages = create_servant_pages(servant)
@@ -383,7 +395,18 @@ async def servant(ctx: interactions.CommandContext, servantName: str = "", regio
             placeholder="Select one...",
             custom_id="menu_component",
         )
-        await ctx.send(f"{len(servants)} matches found.", components=selectMenu)
+        embed = interactions.Embed(
+            title=f"{len(servants)} matches found.",
+            color=interactions.Color.blurple()
+        )
+
+        if servantName != "":
+            embed.add_field("Servant name", servantName, True)
+        if cv != "":
+            embed.add_field("CV", get_cv_name(cv, region), True)
+        if region != "":
+            embed.add_field("Region", region, True)
+        await ctx.send(content=None, components=selectMenu, embeds=embed)
 
 
 @bot.component("menu_component")
@@ -500,14 +523,14 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
 # Autocomplete functions
 def get_enums(enum_type: str):
     response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_enums.json")
+        f"https://api.atlasacademy.io/export/JP/nice_enums.json") # JP and NA use the same enums
     enums = json.loads(response.text)
     return enums.get(enum_type)
 
 
 def get_traits():
     response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_trait.json")
+        f"https://api.atlasacademy.io/export/JP/nice_trait.json") # JP and NA use the same enums
     return json.loads(response.text)
 
 
@@ -518,7 +541,7 @@ def getEnumName(string):
     return
 
 
-def populateList(enumName: str, input_value: str):
+def populate_enum_list(enumName: str, input_value: str):
     fnEnums = get_enums(enumName)
     options = fnEnums.values()
     filteredOptions = [
@@ -532,51 +555,79 @@ def populateList(enumName: str, input_value: str):
     return choices
 
 
-def populateSkillNamesList(input_value: str):
-    return populateList("NiceFuncType", input_value)
+def populate_skill_names(input_value: str):
+    return populate_enum_list("NiceFuncType", input_value)
 
 
-def populateTargetList(input_value: str):
-    return populateList("NiceFuncTargetType", input_value)
+def populate_targets(input_value: str):
+    return populate_enum_list("NiceFuncTargetType", input_value)
 
 
-def populateBuffList(input_value: str):
-    return populateList("NiceBuffType", input_value)
+def populate_buffs(input_value: str):
+    return populate_enum_list("NiceBuffType", input_value)
+
+# Load CV list
+session = requests_cache.CachedSession()
+response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_cv.json")
+cv_list_jp = json.loads(response.text)
+response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_cv_lang_en.json")
+cv_list_jp_en = json.loads(response.text)
+cv_list = {}
+for cv_jp in cv_list_jp:
+    cv_en = next(cv for cv in cv_list_jp_en if cv.get("id") == cv_jp.get("id"))
+    cv_list[cv_jp.get("id")] = f"{cv_jp.get('name')} ({cv_en.get('name')})"
+
+def populate_cv(input_value: str):
+    matched_cvs = [
+        cv for cv in cv_list.items() if input_value.upper() in cv[1].upper()
+    ]
+    choices = []
+    for cv in matched_cvs[0:24]:
+        choices.append(interactions.Choice(name=cv[1], value=str(cv[0])))
+    return choices
 
 
-@bot.autocomplete(command="skill", name="type")
-@bot.autocomplete(command="np", name="type")
-@bot.autocomplete(command="skill-or-np", name="type")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
-    await ctx.populate(populateSkillNamesList(type))
+def get_cv_name(cv_id: str, region: str = "JP"):
+    if region == "JP":
+        cv_name = next(cv for cv in cv_list_jp if cv.get("id") == int(cv_id))
+    elif region == "NA":
+        cv_name = next(cv for cv in cv_list_jp_en if cv.get("id") == int(cv_id))
+    return cv_name.get('name')
+
+
+@bot.autocomplete(command="servant", name="cv")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = ""):
+    await ctx.populate(populate_cv(cv))
 
 
 @bot.autocomplete(command="skill", name="type2")
 @bot.autocomplete(command="np", name="type2")
 @bot.autocomplete(command="skill-or-np", name="type2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
-    await ctx.populate(populateSkillNamesList(type2))
+    await ctx.populate(populate_skill_names(type2))
 
 
 @bot.autocomplete(command="skill", name="target")
 @bot.autocomplete(command="np", name="target")
 @bot.autocomplete(command="skill-or-np", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    await ctx.populate(populateTargetList(target))
+    await ctx.populate(populate_targets(target))
 
 
 @bot.autocomplete(command="skill", name="buff")
 @bot.autocomplete(command="np", name="buff")
 @bot.autocomplete(command="skill-or-np", name="buff")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str = ""):
-    await ctx.populate(populateBuffList(buff))
+    await ctx.populate(populate_buffs(buff))
 
 
 @bot.autocomplete(command="skill", name="buff2")
 @bot.autocomplete(command="np", name="buff2")
 @bot.autocomplete(command="skill-or-np", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
-    await ctx.populate(populateBuffList(buff2))
+    await ctx.populate(populate_buffs(buff2))
 
 
 @bot.autocomplete(command="servant", name="region")
