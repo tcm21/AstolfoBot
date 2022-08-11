@@ -86,7 +86,7 @@ def create_servant_pages(servant):
 
     embed.add_field("Name", servant.get('name'), True)
     embed.add_field("Rarity", "★"*servant.get('rarity'), True)
-    embed.add_field("Class", servant.get('className').capitalize(), True)
+    embed.add_field("Class", title_case(servant.get('className')), True)
     embed.add_field("Attribute", servant.get('attribute').capitalize(), True)
     embed.add_field("Cards", (
         f"{servant.get('cards')[0][0].upper()}"
