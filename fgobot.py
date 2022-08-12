@@ -134,7 +134,10 @@ def create_servant_pages(servant, region):
         embed.add_field("Traits", ", ".join(otherTraits))
 
     embed.add_field("Gender", title_case(servant.get("gender")), True)
-    embed.add_field("Voice Actor", servant.get("profile").get("cv"), True)
+    if servant.get("profile").get("cv"):
+        embed.add_field("Voice Actor", servant.get("profile").get("cv"), True)
+    else:
+        embed.add_field("Voice Actor", "N/A", True)
     embed.add_field("Illustrator", servant.get(
         "profile").get("illustrator"), True)
 
@@ -158,22 +161,23 @@ def create_servant_pages(servant, region):
         pages.append(Page(f"Skills", embed))
     
     # Skill materials
-    embed = interactions.Embed(
-        title="Skill Materials",
-        description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
-        color=interactions.Color.blurple()
-    )
-    embed.set_thumbnail(
-        url=faceAssetUrl
-    )
-    for id, skillMats in servant.get("skillMaterials").items():
-        skillMaterialText = []
-        for item in skillMats.get("items"):
-            itemUrl = f"https://apps.atlasacademy.io/db/{region}/item/{item.get('item').get('id')}"
-            skillMaterialText.append(f"[{item.get('item').get('name')}]({itemUrl}) x {item.get('amount')}")
-        skillMaterialText.append(f"QP: {'{:,}'.format(skillMats.get('qp'))}")
-        embed.add_field(f"{int(id) - 1}→{id}:", "\n".join(skillMaterialText), True)
-    pages.append(Page(f"Skill Materials", embed))
+    if len(servant.get("skillMaterials")) > 0:
+        embed = interactions.Embed(
+            title="Skill Materials",
+            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            color=interactions.Color.blurple()
+        )
+        embed.set_thumbnail(
+            url=faceAssetUrl
+        )
+        for id, skillMats in servant.get("skillMaterials").items():
+            skillMaterialText = []
+            for item in skillMats.get("items"):
+                itemUrl = f"https://apps.atlasacademy.io/db/{region}/item/{item.get('item').get('id')}"
+                skillMaterialText.append(f"[{item.get('item').get('name')}]({itemUrl}) x {item.get('amount')}")
+            skillMaterialText.append(f"QP: {'{:,}'.format(skillMats.get('qp'))}")
+            embed.add_field(f"{int(id) - 1}→{id}:", "\n".join(skillMaterialText), True)
+        pages.append(Page(f"Skill Materials", embed))
 
     # NPs
     if len(servant.get("noblePhantasms")) > 0:
@@ -196,6 +200,9 @@ def create_servant_pages(servant, region):
     ascensions = servant.get("extraAssets").get("charaGraph").get("ascension")
     ascensionCount = 0
     for id, ascensionImgUrl in ascensions.items():
+        if len(servant.get("ascensionMaterials")) == 0:
+            continue
+
         embed = interactions.Embed(
             title=f"Ascension #{ascensionCount + 1}",
             description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
