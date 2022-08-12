@@ -6,6 +6,7 @@ import os
 import re
 
 from interactions.ext.paginator import Page, Paginator
+from fuzzy_search import match_name
 
 token = os.environ.get("TOKEN")
 if token == "" or token == None:
@@ -20,32 +21,51 @@ bot = interactions.Client(
 session = requests_cache.CachedSession()
 
 
-def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP") -> interactions.Embed:
+def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     """Gets the servant info based on the search query.
 
     Args:
         name (str): Servant name
+        cv_id (str): Voice actor ID
+        class_name (str): Class name
         region (str): Region (Default: JP)
 
     Returns:
         list: servants object
     """
-    nameQuery = ""
-    cvQuery = ""
-    clsNameQuery = ""
-    if (name != ""):
-        nameQuery = f"name={name}"
-    if (cv_id != ""):
-        cvQuery = f"&cv={get_cv_name(cv_id, region)}"
-    if class_name != "":
-        clsNameQuery= f"&className={class_name}"
-    response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}{clsNameQuery}")
-    servants = json.loads(response.text)
-    if not isinstance(servants, list) or len(servants) == 0:
-        return []
+    servants_1 = []
+    if name:
+        allServantsUrl = f"https://api.atlasacademy.io/export/JP/basic_servant_lang_en.json"
+        if region == "NA":
+            allServantsUrl = f"https://api.atlasacademy.io/export/NA/basic_servant.json"
+        r = session.get(allServantsUrl)
+        servants_1 = json.loads(r.text)
 
-    return servants
+        servants_1 = [
+            svt
+            for svt in servants_1
+            if match_name(name, svt.get("name"))
+            or match_name(name, svt.get("originalName"))
+        ]
+
+    servants_2 = []
+    if cv_id and class_name:
+        cvQuery = ""
+        clsNameQuery = ""
+        if cv_id:
+            cvQuery = f"&cv={get_cv_name(cv_id, region)}"
+        if class_name:
+            clsNameQuery= f"&className={class_name}"
+        response = session.get(
+            f"https://api.atlasacademy.io/basic/{region}/servant/search?{cvQuery}{clsNameQuery}")
+        servants_2 = json.loads(response.text)
+        if not isinstance(servants_2, list):
+            servants_2 = []
+
+    if len(servants_1) > 0 and len(servants_2) > 0:
+        return common_elements(servants_1, servants_2)
+    servants_1.extend(servants_2)
+    return servants_1
 
 
 def get_servant_by_id(id: int, region: str = "JP"):
