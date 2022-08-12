@@ -610,7 +610,7 @@ async def skill(
     buff: str = "",
     buff2: str = "",
     trait: str = "",
-    region: str = "JP",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
@@ -645,7 +645,7 @@ async def np(
     buff: str = "",
     buff2: str = "",
     trait: str = "",
-    region: str = "JP",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
@@ -681,7 +681,7 @@ async def skillOrNp(
     buff: str = "",
     buff2: str = "",
     trait: str = "",
-    region: str = "JP",
+    region: str = "",
 ):
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
@@ -696,6 +696,53 @@ async def skillOrNp(
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
     pages.extend(get_skills(type, type2, "NP", target, buff, buff2, trait, region))
+    await send_paginator(ctx, pages)
+
+
+@bot.command(
+    description="Gets support list from friend code"
+)
+@interactions.option(str, name="friend-code", description="Friend code", required=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def support(
+    ctx: interactions.CommandContext,
+    friend_code: str = "",
+    region: str = "",
+):
+    if not friend_code:
+        await ctx.send("Invalid input.")
+        return
+
+    if region == "" and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id]
+
+    await ctx.defer()
+    r = session.get(f"https://rayshift.io/api/v1/support/decks/{region}/{friend_code}")
+    data = json.loads(r.text)
+    if data.get("status") != 200:
+        print(data.get("message"))
+        await ctx.send(data.get("message"))
+        return
+    #imageUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/32/0.png"
+    pages = []
+    cnt = 0
+    for deck in data.get('response').get('decks').items():
+        cnt += 1
+        embed = interactions.Embed(
+            title=f"Deck #{cnt}",
+            color=interactions.Color.blurple()
+        )
+
+        embed.add_field("Name", data.get('response').get('name'), True)
+        embed.add_field("Friend code", '{:,}'.format(int(friend_code)), True)
+
+        ascensionImgUrl = f"https://rayshift.io{deck[1]}"
+        embed.set_image(url=ascensionImgUrl)
+        pages.append(Page(f"Deck #{cnt}", embed))
+
     await send_paginator(ctx, pages)
 
 
@@ -854,6 +901,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str 
 @bot.autocomplete(command="np", name="region")
 @bot.autocomplete(command="skill-or-np", name="region")
 @bot.autocomplete(command="region", name="region")
+@bot.autocomplete(command="support", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
     choices = []
     choices.append(interactions.Choice(name="NA", value="NA"))
