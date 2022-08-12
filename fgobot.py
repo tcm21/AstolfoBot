@@ -546,7 +546,7 @@ async def servant(
         region = "JP"
         default_regions[ctx.guild_id] = region
 
-    region = default_regions[ctx.guild_id]
+    region = default_regions[ctx.guild_id] if not region else region
 
     await ctx.defer()
     servants = get_servant(servantName, cv, className, region)
@@ -620,7 +620,7 @@ async def skill(
         region = "JP"
         default_regions[ctx.guild_id] = region
 
-    region = default_regions[ctx.guild_id]
+    region = default_regions[ctx.guild_id] if not region else region
 
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
@@ -655,7 +655,7 @@ async def np(
         region = "JP"
         default_regions[ctx.guild_id] = region
 
-    region = default_regions[ctx.guild_id]
+    region = default_regions[ctx.guild_id] if not region else region
 
     await ctx.defer()
     pages = get_skills(type, type2, "NP", target, buff, buff2, trait, region)
@@ -717,7 +717,7 @@ async def support(
         region = "JP"
         default_regions[ctx.guild_id] = region
 
-    region = default_regions[ctx.guild_id]
+    region = default_regions[ctx.guild_id] if not region else region
 
     await ctx.defer()
     friend_code = friend_code.replace(",","")
@@ -727,22 +727,31 @@ async def support(
         print(data.get("message"))
         await ctx.send(data.get("message"))
         return
-    #imageUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/32/0.png"
+
     pages = []
-    cnt = 0
-    for deck in data.get('response').get('decks').items():
-        cnt += 1
+    normal_cnt = 0
+    event_cnt = 0
+    for deckId in data.get('response').get('decksPresent'):
+        title = ""
+
+        if deckId in [1, 2, 4]:
+            normal_cnt += 1
+            title = f"Normal Deck #{normal_cnt}"
+        elif deckId in [8, 16, 32]:
+            event_cnt += 1
+            title = f"Event Deck #{event_cnt}"
+
         embed = interactions.Embed(
-            title=f"Deck #{cnt}",
+            title=title,
             color=interactions.Color.blurple()
         )
 
         embed.add_field("Name", data.get('response').get('name'), True)
         embed.add_field("Friend code", '{:,}'.format(int(friend_code)), True)
 
-        ascensionImgUrl = f"https://rayshift.io{deck[1]}"
+        ascensionImgUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/{deckId}/1.png"
         embed.set_image(url=ascensionImgUrl)
-        pages.append(Page(f"Deck #{cnt}", embed))
+        pages.append(Page(title, embed))
 
     await send_paginator(ctx, pages)
 
