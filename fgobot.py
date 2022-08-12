@@ -143,6 +143,9 @@ def create_servant_pages(servant, region):
         description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
         color=interactions.Color.blurple()
     )
+    embed.set_thumbnail(
+        url=faceAssetUrl
+    )
     for id, skillMats in servant.get("skillMaterials").items():
         skillMaterialText = []
         for item in skillMats.get("items"):
