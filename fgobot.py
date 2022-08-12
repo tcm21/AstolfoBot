@@ -86,7 +86,7 @@ def create_servant_pages(servant):
     embed.add_field("Name", servant.get('name'), True)
     embed.add_field("Rarity", "★"*servant.get('rarity'), True)
     embed.add_field("Class", title_case(servant.get('className')), True)
-    embed.add_field("Attribute", servant.get('attribute').capitalize(), True)
+    embed.add_field("Attribute", title_case(servant.get('attribute')), True)
     embed.add_field("Cards", (
         f"{servant.get('cards')[0][0].upper()}"
         f"{servant.get('cards')[1][0].upper()}"
@@ -341,7 +341,7 @@ def get_skills(
                  != "heroine")  # Mash has her own category lmao
             ):
                 continue
-            servant_id = f"{servant.get('name')} ({servant.get('className').capitalize()})"
+            servant_id = f"{servant.get('name')} ({title_case(servant.get('className'))})"
             if servant_id not in servantList:
                 totalCount += 1
                 servantList.append(servant_id)
@@ -352,7 +352,7 @@ def get_skills(
                     pageCount = 0
                 skillName = skill.get('name')
                 embed.add_field(
-                    f"{totalCount}: {servant.get('name')} ({servant.get('className').capitalize()})\n",
+                    f"{totalCount}: {servant.get('name')} ({title_case(servant.get('className'))})\n",
                     (
                         f"[{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
                     )
@@ -461,7 +461,7 @@ async def servant(
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({servant.get('className').capitalize()})", value=f"{servant.get('id')}:{region}"))
+                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
         selectMenu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
