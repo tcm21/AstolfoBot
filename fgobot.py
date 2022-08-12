@@ -720,6 +720,7 @@ async def support(
     region = default_regions[ctx.guild_id]
 
     await ctx.defer()
+    friend_code = friend_code.replace(",","")
     r = session.get(f"https://rayshift.io/api/v1/support/decks/{region}/{friend_code}")
     data = json.loads(r.text)
     if data.get("status") != 200:
