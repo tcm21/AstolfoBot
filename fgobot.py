@@ -67,7 +67,7 @@ def get_servant_by_id(id: int, region: str = "JP"):
         return servant
 
 
-def create_servant_pages(servant):
+def create_servant_pages(servant, region):
     pages = []
 
     # Basic info
@@ -83,7 +83,10 @@ def create_servant_pages(servant):
         url=faceAssetUrl
     )
 
-    embed.add_field("Name", servant.get('name'), True)
+    servant_name = servant.get('name')
+    if region == "JP" and servant.get('name') != servant.get('ruby'):
+        servant_name += "\n" + servant.get('ruby')
+    embed.add_field("Name", servant_name, True)
     embed.add_field("Rarity", "★"*servant.get('rarity'), True)
     embed.add_field("Class", title_case(servant.get('className')), True)
     embed.add_field("Attribute", title_case(servant.get('attribute')), True)
@@ -110,7 +113,8 @@ def create_servant_pages(servant):
     if len(otherTraits) > 0:
         embed.add_field("Traits", ", ".join(otherTraits))
 
-    embed.add_field("CV", servant.get("profile").get("cv"), True)
+    embed.add_field("Gender", title_case(servant.get("gender")), True)
+    embed.add_field("Voice Actor", servant.get("profile").get("cv"), True)
     embed.add_field("Illustrator", servant.get(
         "profile").get("illustrator"), True)
 
@@ -132,6 +136,21 @@ def create_servant_pages(servant):
             embed.add_field(
                 f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
         pages.append(Page(f"Skills", embed))
+    
+    # Skill materials
+    embed = interactions.Embed(
+        title="Skill Materials",
+        description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+        color=interactions.Color.blurple()
+    )
+    for id, skillMats in servant.get("skillMaterials").items():
+        skillMaterialText = []
+        for item in skillMats.get("items"):
+            itemUrl = f"https://apps.atlasacademy.io/db/{region}/item/{item.get('item').get('id')}"
+            skillMaterialText.append(f"[{item.get('item').get('name')}]({itemUrl}) x {item.get('amount')}")
+        skillMaterialText.append(f"QP: {'{:,}'.format(skillMats.get('qp'))}")
+        embed.add_field(f"{int(id) - 1}→{id}:", "\n".join(skillMaterialText), True)
+    pages.append(Page(f"Skill Materials", embed))
 
     # NPs
     if len(servant.get("noblePhantasms")) > 0:
@@ -149,6 +168,28 @@ def create_servant_pages(servant):
                 noblePhantasm.get('detail')
             )
         pages.append(Page(f"Noble Phantasms", embed))
+
+    # Ascensions
+    ascensions = servant.get("extraAssets").get("charaGraph").get("ascension")
+    ascensionCount = 0
+    for id, ascensionImgUrl in ascensions.items():
+        embed = interactions.Embed(
+            title=f"Ascension #{ascensionCount + 1}",
+            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            color=interactions.Color.blurple()
+        )
+
+        descText = []
+        ascensionItems = servant.get("ascensionMaterials").get(str(ascensionCount)).get("items")
+        for ascensionItem in ascensionItems:
+            itemUrl = f"https://apps.atlasacademy.io/db/{region}/item/{ascensionItem.get('item').get('id')}"
+            descText.append(f"[{ascensionItem.get('item').get('name')}]({itemUrl}) x {ascensionItem.get('amount')}")
+        qpCount = servant.get("ascensionMaterials").get(str(ascensionCount)).get("qp")
+        descText.append(f"QP: {'{:,}'.format(qpCount)}")
+        embed.add_field("Required Materials", "\n".join(descText))
+        embed.set_image(url=ascensionImgUrl)
+        pages.append(Page(f"Ascension #{ascensionCount + 1}", embed))
+        ascensionCount += 1
 
     return pages
 
@@ -455,7 +496,7 @@ async def servant(
         return
     if len(servants) == 1:
         servant = get_servant_by_id(servants[0].get("id"), region)
-        pages = create_servant_pages(servant)
+        pages = create_servant_pages(servant, region)
         await send_paginator(ctx, pages)
     else:
         options = []
@@ -488,7 +529,7 @@ async def select_response(ctx, value=[]):
     id = value[0].split(":")[0]
     region = value[0].split(":")[1]
     servant = get_servant_by_id(id, region)
-    pages = create_servant_pages(servant)
+    pages = create_servant_pages(servant, region)
     await send_paginator(ctx, pages)
 
 
