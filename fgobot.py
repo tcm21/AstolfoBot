@@ -472,8 +472,31 @@ def common_elements(*lists):
     [res.append(x) for x in common_list if x not in res]
     return res
 
+default_regions = {}
 
 # Commands
+@bot.command(
+    name="region",
+    description="Get/Set default region for a server",
+)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def region(
+    ctx: interactions.CommandContext,
+    region: str = ""
+):
+    if region == "":
+        if default_regions.get(ctx.guild_id) == None:
+            region = "JP"
+            default_regions[ctx.guild_id] = region
+            await ctx.send(f"Server region is: \"{region}\".")
+            return
+        else:
+            await ctx.send(f"Server region is: \"{default_regions.get(ctx.guild_id)}\".")
+            return
+
+    default_regions[ctx.guild_id] = region
+    await ctx.send(f"Server default region set to \"{region}\".")
+
 @bot.command(
     description="Servant info lookup",
 )
@@ -486,11 +509,17 @@ async def servant(
     servantName: str = "",
     cv: str = "",
     className: str = "",
-    region: str = "JP"
+    region: str = ""
 ):
     if servantName == "" and cv == "" and className == "":
         await ctx.send("Invalid input.")
         return
+
+    if region == "" and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id]
 
     await ctx.defer()
     servants = get_servant(servantName, cv, className, region)
@@ -560,6 +589,12 @@ async def skill(
         await ctx.send("Invalid input.")
         return
 
+    if region == "" and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id]
+
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
     await send_paginator(ctx, pages)
@@ -588,6 +623,12 @@ async def np(
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
         return
+
+    if region == "" and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id]
 
     await ctx.defer()
     pages = get_skills(type, type2, "NP", target, buff, buff2, trait, region)
@@ -618,6 +659,12 @@ async def skillOrNp(
     if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
         await ctx.send("Invalid input.")
         return
+
+    if region == "" and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id]
 
     await ctx.defer()
     pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
@@ -779,6 +826,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str 
 @bot.autocomplete(command="skill", name="region")
 @bot.autocomplete(command="np", name="region")
 @bot.autocomplete(command="skill-or-np", name="region")
+@bot.autocomplete(command="region", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
     choices = []
     choices.append(interactions.Choice(name="NA", value="NA"))
