@@ -9,13 +9,20 @@ from interactions.ext.paginator import Page, Paginator
 from fuzzy_search import match_name
 
 token = os.environ.get("TOKEN")
-if token == "" or token == None:
+if not token:
     configparser = configparser.ConfigParser()
     configparser.read('env.config')
     token = configparser.get('Auth', 'TOKEN')
 
+scopes = os.environ.get("SCOPES")
+if not scopes:
+    configparser = configparser.ConfigParser() if not configparser else configparser
+    configparser.read('env.config')
+    scopes = configparser.get('Auth', 'SCOPES', fallback=None)
+
 bot = interactions.Client(
     token=token,
+    default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None
 )
 
 session = requests_cache.CachedSession()
@@ -141,6 +148,7 @@ def create_servant_pages(servant, region):
     embed.add_field("Illustrator", servant.get(
         "profile").get("illustrator"), True)
 
+    embed.set_footer("Data via Atlas Academy")
     pages.append(Page(f"Basic Info", embed))
 
     # Skills
@@ -158,6 +166,7 @@ def create_servant_pages(servant, region):
         for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
             embed.add_field(
                 f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
+        embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Skills", embed))
     
     # Skill materials
@@ -177,6 +186,7 @@ def create_servant_pages(servant, region):
                 skillMaterialText.append(f"[{item.get('item').get('name')}]({itemUrl}) x {item.get('amount')}")
             skillMaterialText.append(f"QP: {'{:,}'.format(skillMats.get('qp'))}")
             embed.add_field(f"{int(id) - 1}→{id}:", "\n".join(skillMaterialText), True)
+        embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Skill Materials", embed))
 
     # NPs
@@ -194,6 +204,7 @@ def create_servant_pages(servant, region):
                 f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})",
                 noblePhantasm.get('detail')
             )
+        embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Noble Phantasms", embed))
 
     # Ascensions
@@ -218,6 +229,7 @@ def create_servant_pages(servant, region):
         descText.append(f"QP: {'{:,}'.format(qpCount)}")
         embed.add_field("Required Materials", "\n".join(descText))
         embed.set_image(url=ascensionImgUrl)
+        embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Ascension #{ascensionCount + 1}", embed))
         ascensionCount += 1
 
@@ -235,10 +247,10 @@ def get_functions(type: str, target: str = "", region: str = "JP"):
     Returns:
         A list of functions with the specified effect.
     """
-    if type == "":
+    if not type:
         return []
     targetQueryStr = ""
-    if target != "":
+    if target:
         targetQueryStr = f"&targetType={target}"
     url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&type={type}{targetQueryStr}"
     response = session.get(url)
@@ -257,10 +269,10 @@ def get_functions_by_trait(trait: str, target: str = "", region: str = "JP"):
     Returns:
         A list of functions with the specified effect.
     """
-    if trait == "":
+    if not trait:
         return []
     targetQueryStr = ""
-    if target != "":
+    if target:
         targetQueryStr = f"&targetType={target}"
 
     url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&tvals={trait}{targetQueryStr}"
@@ -273,12 +285,12 @@ def get_skills_from_functions(functions, flag: str = "skill"):
     found_skills = []
     for function in functions:
         for skill in function.get('reverse').get('basic').get(flag):
-            if skill.get('name') == "" or skill.get('type') == "passive":
+            if not skill.get('name') or skill.get('type') == "passive":
                 continue
             servants = skill.get('reverse').get('basic').get('servant')
             servant_found = False
             for servant in servants:
-                if (servant.get('name') == "" or
+                if (not servant.get('name') or
                             servant.get('type') == "servantEquip" or
                             servant.get('type') == "enemy"
                         ):
@@ -301,7 +313,7 @@ def get_skills_with_type(type: str, flag: str = "skill", target: str = "", regio
     Returns:
         A list of skill objects with the specified effect.
     """
-    if type == "":
+    if not type:
         return None
     functions = get_functions(type, target, region)
     found_skills = get_skills_from_functions(functions, flag)
@@ -338,7 +350,7 @@ def get_nps_with_trait(trait: str, region: str = "JP"):
 
 
 def get_skills_with_buff(buffType: str = "", flag: str = "skill", region: str = "JP"):
-    if buffType == "":
+    if not buffType:
         return None
     url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&type={buffType}"
     response = session.get(url)
@@ -352,7 +364,7 @@ def get_skills_with_buff(buffType: str = "", flag: str = "skill", region: str = 
 
 
 def get_skill_details(id: str = "", flag: str = "skill", region: str = "JP"):
-    if id == "":
+    if not id:
         return None
     url = f"https://api.atlasacademy.io/nice/{region}/{flag}/{id}"
     response = session.get(url)
@@ -407,7 +419,7 @@ def get_skills(
         servantList = []
         for servant in servants:
             if (
-                servant.get('name') == "" or
+                not servant.get('name') or
                 (servant.get('type') != "normal" and servant.get('type')
                  != "heroine")  # Mash has her own category lmao
             ):
@@ -432,6 +444,8 @@ def get_skills(
 
     if (totalCount == 0):
         embed.add_field("Not found.", "Try different parameters")
+    else:
+        embed.set_footer("Data via Atlas Academy")
     embeds.append(embed)
     pages = []
     cnt = 0
@@ -464,19 +478,19 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
         color=interactions.Color.blurple()
     )
 
-    if type != "":
+    if type:
         embed.add_field("Type 1", title_case(type), True)
-    if type2 != "":
+    if type2:
         embed.add_field("Type 2", title_case(type2), True)
-    if target != "":
+    if target:
         embed.add_field("Target", title_case(target), True)
-    if buffType1 != "":
+    if buffType1:
         embed.add_field("Buff 1", title_case(buffType1), True)
-    if buffType2 != "":
+    if buffType2:
         embed.add_field("Buff 2", title_case(buffType2), True)
-    if trait != "":
+    if trait:
         embed.add_field("Affected Trait", title_case(get_traits()[trait]), True)
-    if region != "":
+    if region:
         embed.add_field("Region", region, True)
 
     return embed
@@ -511,7 +525,7 @@ async def region(
     ctx: interactions.CommandContext,
     region: str = ""
 ):
-    if region == "":
+    if not region:
         if default_regions.get(ctx.guild_id) == None:
             region = "JP"
             default_regions[ctx.guild_id] = region
@@ -538,11 +552,11 @@ async def servant(
     className: str = "",
     region: str = ""
 ):
-    if servantName == "" and cv == "" and className == "":
+    if not servantName and not cv and not className:
         await ctx.send("Invalid input.")
         return
 
-    if region == "" and default_regions.get(ctx.guild_id) == None:
+    if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
         default_regions[ctx.guild_id] = region
 
@@ -572,13 +586,13 @@ async def servant(
             color=interactions.Color.blurple()
         )
 
-        if servantName != "":
+        if servantName:
             embed.add_field("Servant name", servantName, True)
-        if cv != "":
-            embed.add_field("CV", get_cv_name(cv, region), True)
-        if className != "":
+        if cv:
+            embed.add_field("Voice actor", get_cv_name(cv, region), True)
+        if className:
             embed.add_field("Class", title_case(className), True)
-        if region != "":
+        if region:
             embed.add_field("Region", region, True)
         await ctx.send(content=None, components=selectMenu, embeds=embed)
 
@@ -612,11 +626,11 @@ async def skill(
     trait: str = "",
     region: str = "",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
+    if not type and not type2 and not target and not buff and not buff2 and not trait:
         await ctx.send("Invalid input.")
         return
 
-    if region == "" and default_regions.get(ctx.guild_id) == None:
+    if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
         default_regions[ctx.guild_id] = region
 
@@ -647,11 +661,11 @@ async def np(
     trait: str = "",
     region: str = "",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
+    if not type and not type2 and not target and not buff and not buff2 and not trait:
         await ctx.send("Invalid input.")
         return
 
-    if region == "" and default_regions.get(ctx.guild_id) == None:
+    if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
         default_regions[ctx.guild_id] = region
 
@@ -683,11 +697,11 @@ async def skillOrNp(
     trait: str = "",
     region: str = "",
 ):
-    if (type == "" and type2 == "" and target == "" and buff == "" and buff2 == "" and trait == ""):
+    if not type and not type2 and not target and not buff and not buff2 and not trait:
         await ctx.send("Invalid input.")
         return
 
-    if region == "" and default_regions.get(ctx.guild_id) == None:
+    if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
         default_regions[ctx.guild_id] = region
 
@@ -713,7 +727,7 @@ async def support(
         await ctx.send("Invalid input.")
         return
 
-    if region == "" and default_regions.get(ctx.guild_id) == None:
+    if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
         default_regions[ctx.guild_id] = region
 
@@ -724,7 +738,9 @@ async def support(
     r = session.get(f"https://rayshift.io/api/v1/support/decks/{region}/{friend_code}")
     data = json.loads(r.text)
     if data.get("status") != 200:
-        print(data.get("message"))
+        if data.get("status") == 404:
+            await ctx.send(f"{data.get('message')}.\nTry visiting the [Rayshift website](https://rayshift.io/{region.lower()}/{friend_code})")
+            return
         await ctx.send(data.get("message"))
         return
 
@@ -751,6 +767,7 @@ async def support(
 
         ascensionImgUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/{deckId}/1.png"
         embed.set_image(url=ascensionImgUrl)
+        embed.set_footer("Data via Rayshift.io")
         pages.append(Page(title, embed))
 
     await send_paginator(ctx, pages)
@@ -790,7 +807,7 @@ def get_traits():
 
 
 def title_case(string):
-    if (string == ""):
+    if not string:
         return
     words = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', string)).split()
     if len(words) > 0:
