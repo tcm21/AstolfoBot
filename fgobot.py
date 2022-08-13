@@ -6,6 +6,7 @@ import os
 import re
 
 from interactions.ext.paginator import Page, Paginator
+from interactions.ext.tasks import IntervalTrigger, create_task
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -18,15 +19,30 @@ if not scopes:
     parser.read('env.config')
     scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
-presence = interactions.ClientPresence(activities=[{
-        "name": "Fate/Grand Order",
-        "type": 0,
-    }])
+
+commands = ["/servant", "/skill", "/np", "/skill-or-np", "/support"]
+currentCmdIdx = 0
+
+def new_presence() -> interactions.ClientPresence:
+    global currentCmdIdx
+    commandText = commands[currentCmdIdx]
+    currentCmdIdx += 1
+    if currentCmdIdx == len(commands):
+        currentCmdIdx = 0
+    return interactions.ClientPresence(
+        activities=[
+            {
+                "name": commandText,
+                "type": 0,
+            },
+        ],
+        status="online",
+    )
 
 bot = interactions.Client(
     token=token,
     default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None,
-    presence=presence
+    presence = new_presence()
 )
 
 session = requests_cache.CachedSession()
@@ -927,5 +943,15 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str
 @bot.autocomplete(command="skill-or-np", name="trait")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
     await ctx.populate(populate_traits(trait))
+
+@bot.event
+async def on_start():
+    status_task.start()
+
+
+@create_task(IntervalTrigger(60))
+async def status_task():
+    await bot.change_presence(new_presence())
+
 
 bot.start()
