@@ -8,6 +8,8 @@ import re
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
 
+from text_builders import get_skill_description
+
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
 if not token:
@@ -96,6 +98,25 @@ def get_servant_by_id(id: int, region: str = "JP"):
         return servant
 
 
+def get_skill_by_id(id: int, region: str = "JP"):
+    """Get skill by ID
+
+    Args:
+        id (int): Skill ID
+        region (str, optional): Region. Defaults to "JP".
+
+    Returns:
+        Skill object
+    """
+    response = session.get(
+        f"https://api.atlasacademy.io/nice/{region}/skill/{id}")
+    skill = json.loads(response.text)
+    if skill.get('detail') == "Skill not found":
+        return None
+    else:
+        return skill
+
+
 def create_servant_pages(servant, region):
     pages = []
 
@@ -103,7 +124,7 @@ def create_servant_pages(servant, region):
     embed = interactions.Embed(
         title="Basic Info",
         description="",
-        color=interactions.Color.blurple()
+        color=0xf2aba6
     )
     faceAssetUrl = servant.get('extraAssets').get('faces').get('ascension').get('1')
     if faceAssetUrl == None:
@@ -158,7 +179,7 @@ def create_servant_pages(servant, region):
         embed = interactions.Embed(
             title="Skills",
             description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
         embed.set_thumbnail(
             url=faceAssetUrl
@@ -167,7 +188,8 @@ def create_servant_pages(servant, region):
         # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
         for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
             embed.add_field(
-                f"Skill {skill.get('num')}: {skill.get('name')}", skill.get('detail'))
+                f"Skill {skill.get('num')}: {skill.get('name')}", get_skill_description(session, skill))
+
         embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Skills", embed))
     
@@ -176,7 +198,7 @@ def create_servant_pages(servant, region):
         embed = interactions.Embed(
             title="Skill Materials",
             description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
         embed.set_thumbnail(
             url=faceAssetUrl
@@ -196,7 +218,7 @@ def create_servant_pages(servant, region):
         embed = interactions.Embed(
             title="Noble Phantasms",
             description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
         embed.set_thumbnail(
             url=faceAssetUrl
@@ -219,7 +241,7 @@ def create_servant_pages(servant, region):
         embed = interactions.Embed(
             title=f"Ascension #{ascensionCount + 1}",
             description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
 
         descText = []
@@ -477,7 +499,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     embed = interactions.Embed(
         title=f"{'Skills' if flag == 'skill' else 'Noble Phantasms'}",
         description="",
-        color=interactions.Color.blurple()
+        color=0xf2aba6
     )
 
     if type:
@@ -577,7 +599,7 @@ async def servant(
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
+                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}:{ctx.user.id}"))
         selectMenu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
@@ -585,7 +607,7 @@ async def servant(
         )
         embed = interactions.Embed(
             title=f"{len(servants)} matches found.",
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
 
         if servantName:
@@ -600,9 +622,15 @@ async def servant(
 
 
 @bot.component("menu_component")
-async def select_response(ctx, value=[]):
+async def select_response(ctx: interactions.ComponentContext, value=[]):
     id = value[0].split(":")[0]
     region = value[0].split(":")[1]
+    user_id = value[0].split(":")[2]
+    if user_id != ctx.user.id:
+        await ctx.send("This is not for you!")
+        return
+
+    await ctx.defer()
     servant = get_servant_by_id(id, region)
     pages = create_servant_pages(servant, region)
     await send_paginator(ctx, pages)
@@ -761,7 +789,7 @@ async def support(
 
         embed = interactions.Embed(
             title=title,
-            color=interactions.Color.blurple()
+            color=0xf2aba6
         )
 
         embed.add_field("Name", data.get('response').get('name'), True)
@@ -788,6 +816,7 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
         await ctx.send(embeds=pages[0].embeds)
     elif len(pages) >= 2:
         await Paginator(
+            author_only=True,
             client=bot,
             ctx=ctx,
             pages=pages,
