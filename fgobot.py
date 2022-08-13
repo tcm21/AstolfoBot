@@ -22,7 +22,7 @@ if not scopes:
     scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
 
-commands = ["/servant", "/skill", "/np", "/skill-or-np", "/support"]
+commands = ["/servant", "/find skill", "/find np", "/find skill-or-np", "/support"]
 currentCmdIdx = 0
 
 def new_presence() -> interactions.ClientPresence:
@@ -356,6 +356,9 @@ def get_skills_with_trait(trait: str, flag: str = "skill", target: str = "", reg
     Returns:
         A list of skill objects with the specified effect.
     """
+    if not trait:
+        return None
+
     if flag == "skill":
         functions = get_functions_by_trait(trait, target, region)
         found_skills = get_skills_from_functions(functions, flag)
@@ -636,7 +639,11 @@ async def select_response(ctx: interactions.ComponentContext, value=[]):
     await send_paginator(ctx, pages)
 
 
-@bot.command(
+@bot.command()
+async def find(ctx: interactions.CommandContext):
+    pass
+
+@find.subcommand(
     description="Search for servants with skills that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
@@ -671,7 +678,7 @@ async def skill(
     await send_paginator(ctx, pages)
 
 
-@bot.command(
+@find.subcommand(
     description="Search for servants with NP that matches the specified parameters",
 )
 @interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
@@ -706,7 +713,7 @@ async def np(
     await send_paginator(ctx, pages)
 
 
-@bot.command(
+@find.subcommand(
     description="Search for servants with NP and/or skills that matches the specified parameters",
     name="skill-or-np"
 )
@@ -919,45 +926,32 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, className: 
     await ctx.populate(populate_enum_list("SvtClass", className))
 
 
-@bot.autocomplete(command="skill", name="type")
-@bot.autocomplete(command="np", name="type")
-@bot.autocomplete(command="skill-or-np", name="type")
+@bot.autocomplete(command="find", name="type")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
     await ctx.populate(populate_enum_list("NiceFuncType", type))
 
 
-@bot.autocomplete(command="skill", name="type2")
-@bot.autocomplete(command="np", name="type2")
-@bot.autocomplete(command="skill-or-np", name="type2")
+@bot.autocomplete(command="find", name="type2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
     await ctx.populate(populate_enum_list("NiceFuncType", type2))
 
 
-@bot.autocomplete(command="skill", name="target")
-@bot.autocomplete(command="np", name="target")
-@bot.autocomplete(command="skill-or-np", name="target")
+@bot.autocomplete(command="find", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
     await ctx.populate(populate_enum_list("NiceFuncTargetType", target))
 
 
-@bot.autocomplete(command="skill", name="buff")
-@bot.autocomplete(command="np", name="buff")
-@bot.autocomplete(command="skill-or-np", name="buff")
+@bot.autocomplete(command="find", name="buff")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str = ""):
     await ctx.populate(populate_enum_list("NiceBuffType", buff))
 
 
-@bot.autocomplete(command="skill", name="buff2")
-@bot.autocomplete(command="np", name="buff2")
-@bot.autocomplete(command="skill-or-np", name="buff2")
+@bot.autocomplete(command="find", name="buff2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
     await ctx.populate(populate_enum_list("NiceBuffType", buff2))
 
 
-@bot.autocomplete(command="servant", name="region")
-@bot.autocomplete(command="skill", name="region")
-@bot.autocomplete(command="np", name="region")
-@bot.autocomplete(command="skill-or-np", name="region")
+@bot.autocomplete(command="find", name="region")
 @bot.autocomplete(command="region", name="region")
 @bot.autocomplete(command="support", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
@@ -967,9 +961,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str
     await ctx.populate(choices)
 
 
-@bot.autocomplete(command="skill", name="trait")
-@bot.autocomplete(command="np", name="trait")
-@bot.autocomplete(command="skill-or-np", name="trait")
+@bot.autocomplete(command="find", name="trait")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
     await ctx.populate(populate_traits(trait))
 
