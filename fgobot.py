@@ -6,7 +6,6 @@ import os
 import re
 
 from interactions.ext.paginator import Page, Paginator
-from fuzzy_search import match_name
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -19,9 +18,15 @@ if not scopes:
     parser.read('env.config')
     scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
+presence = interactions.ClientPresence(activities=[{
+        "name": "Fate/Grand Order",
+        "type": 0,
+    }])
+
 bot = interactions.Client(
     token=token,
-    default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None
+    default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None,
+    presence=presence
 )
 
 session = requests_cache.CachedSession()
@@ -39,39 +44,21 @@ def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     Returns:
         list: servants object
     """
-    servants_1 = []
+    nameQuery = ""
+    cvQuery = ""
+    clsNameQuery = ""
     if name:
-        allServantsUrl = f"https://api.atlasacademy.io/export/JP/basic_servant_lang_en.json"
-        if region == "NA":
-            allServantsUrl = f"https://api.atlasacademy.io/export/NA/basic_servant.json"
-        r = session.get(allServantsUrl)
-        servants_1 = json.loads(r.text)
-
-        servants_1 = [
-            svt
-            for svt in servants_1
-            if match_name(name, svt.get("name"))
-            or match_name(name, svt.get("originalName"))
-        ]
-
-    servants_2 = []
-    if cv_id and class_name:
-        cvQuery = ""
-        clsNameQuery = ""
-        if cv_id:
-            cvQuery = f"&cv={get_cv_name(cv_id, region)}"
-        if class_name:
-            clsNameQuery= f"&className={class_name}"
-        response = session.get(
-            f"https://api.atlasacademy.io/basic/{region}/servant/search?{cvQuery}{clsNameQuery}")
-        servants_2 = json.loads(response.text)
-        if not isinstance(servants_2, list):
-            servants_2 = []
-
-    if len(servants_1) > 0 and len(servants_2) > 0:
-        return common_elements(servants_1, servants_2)
-    servants_1.extend(servants_2)
-    return servants_1
+        nameQuery = f"&name={name}"
+    if cv_id:
+        cvQuery = f"&cv={get_cv_name(cv_id, region)}"
+    if class_name:
+        clsNameQuery= f"&className={class_name}"
+    response = session.get(
+        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}{clsNameQuery}")
+    servants = json.loads(response.text)
+    if not isinstance(servants, list):
+        servants = []
+    return servants
 
 
 def get_servant_by_id(id: int, region: str = "JP"):
