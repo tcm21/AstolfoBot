@@ -9,16 +9,15 @@ from interactions.ext.paginator import Page, Paginator
 from fuzzy_search import match_name
 
 token = os.environ.get("TOKEN")
+parser = configparser.ConfigParser()
 if not token:
-    configparser = configparser.ConfigParser()
-    configparser.read('env.config')
-    token = configparser.get('Auth', 'TOKEN')
+    parser.read('env.config')
+    token = parser.get('Auth', 'TOKEN')
 
 scopes = os.environ.get("SCOPES")
 if not scopes:
-    configparser = configparser.ConfigParser() if not configparser else configparser
-    configparser.read('env.config')
-    scopes = configparser.get('Auth', 'SCOPES', fallback=None)
+    parser.read('env.config')
+    scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
 bot = interactions.Client(
     token=token,
