@@ -1,3 +1,4 @@
+import asyncio
 import configparser
 import json
 import interactions
@@ -6,8 +7,9 @@ import os
 
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
+from interactions.ext.wait_for import setup, wait_for_component
 
-from text_builders import get_skill_description, title_case
+from text_builders import get_skill_description, title_case, get_enums, get_traits
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -45,6 +47,8 @@ bot = interactions.Client(
     default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None,
     presence = new_presence()
 )
+
+setup(bot)
 
 session = requests_cache.CachedSession()
 
@@ -518,7 +522,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     if buffType2:
         embed.add_field("Buff 2", title_case(buffType2), True)
     if trait:
-        embed.add_field("Affected Trait", title_case(get_traits()[trait]), True)
+        embed.add_field("Affected Trait", title_case(get_traits(session)[trait]), True)
     if region:
         embed.add_field("Region", region, True)
 
@@ -567,6 +571,7 @@ async def region(
     default_regions[ctx.guild_id] = region
     await ctx.send(f"Server default region set to \"{region}\".")
 
+
 @bot.command(
     description="Servant info lookup",
 )
@@ -604,12 +609,13 @@ async def servant(
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}:{ctx.user.id}"))
-        selectMenu = interactions.SelectMenu(
+                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
+        select_menu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
             custom_id="menu_component",
         )
+
         embed = interactions.Embed(
             title=f"{len(servants)} matches found.",
             color=0xf2aba6
@@ -623,21 +629,35 @@ async def servant(
             embed.add_field("Class", title_case(className), True)
         if region:
             embed.add_field("Region", region, True)
-        await ctx.send(content=None, components=selectMenu, embeds=embed)
+        message = await ctx.send(content=None, components=select_menu, embeds=embed)
+
+        async def check(menu_ctx):
+            if int(menu_ctx.author.user.id) == int(ctx.author.user.id):
+                return True
+            await ctx.send("This is not for you!", ephemeral=True)
+            return False
+
+        try:
+            await wait_for_component(
+                bot=bot,
+                components=select_menu,
+                check=check,
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            select_menu.disabled = True
+            await message.edit(content=None, components=select_menu, embeds=embed)
 
 
 @bot.component("menu_component")
 async def select_response(ctx: interactions.ComponentContext, value=[]):
     id = value[0].split(":")[0]
     region = value[0].split(":")[1]
-    user_id = value[0].split(":")[2]
-    if user_id != ctx.user.id:
-        await ctx.send("This is not for you!")
-        return
 
     await ctx.defer()
     servant = get_servant_by_id(id, region)
     pages = create_servant_pages(servant, region)
+    await ctx.message.delete()
     await send_paginator(ctx, pages)
 
 
@@ -833,21 +853,8 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
 
 
 # Autocomplete functions
-def get_enums(enum_type: str):
-    response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_enums.json")  # JP and NA use the same enums
-    enums = json.loads(response.text)
-    return enums.get(enum_type)
-
-
-def get_traits():
-    response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
-    return json.loads(response.text)
-
-
 def populate_enum_list(enumName: str, input_value: str):
-    fnEnums = get_enums(enumName)
+    fnEnums = get_enums(session, enumName)
     options = fnEnums.values()
     filteredOptions = [
         option for option in options
@@ -861,7 +868,7 @@ def populate_enum_list(enumName: str, input_value: str):
 
 
 def populate_traits(input_value: str):
-    traits = get_traits()
+    traits = get_traits(session)
     # Traits ID which starts with 2 and has 4 digits
     filteredTraits = dict(filter(lambda elem:
         str(elem[0])[0] == "2" and

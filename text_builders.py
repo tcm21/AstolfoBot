@@ -1,21 +1,26 @@
 import requests_cache
 import json
 import re
-from enum import Enum
+from enum import Flag
 
 SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
-class NpFunctionType(Enum):
+class NpFunctionType(Flag):
     LEVEL = 1
     OVERCHARGE = 2
-    NONE = 3
+    BOTH = LEVEL | OVERCHARGE
+    NONE = 4
+
 
 def get_np_function_type(function) -> NpFunctionType:
     svals = function.get("svals")
+    svals2 = function.get("svals2")
+    if svals[0].get("Value") != svals[1].get("Value") and svals[0].get("Value") != svals2[1].get("Value"):
+        return NpFunctionType.BOTH
+
     if svals[0].get("Value") != svals[1].get("Value"):
         return NpFunctionType.LEVEL
     
-    svals2 = function.get("svals2")
     if svals[0].get("Value") != svals2[1].get("Value"):
         return NpFunctionType.OVERCHARGE
     
@@ -34,18 +39,22 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         sval_count = svals[0].get("Count")
         sval_value = svals[0].get("Value")
         sval_userate = svals[0].get("UseRate")
+        sval_target = svals[0].get("Target")
 
         chances_text = ""
         values_text = ""
         turns_text = ""
         count_text = ""
         usechance_text = ""
+        supereffective_target = ""
 
         np_function_type = NpFunctionType.NONE
         if is_np: np_function_type = get_np_function_type(function)
 
         buff_type = function.get("buffs")[0].get("type") if function.get("buffs") and len(function.get("buffs")) > 0 else ""
         func_type = function.get("funcType")
+
+        is_single_value = False
         if sval_value:
             valuesTextList = []
             if buff_type.endswith("Function"):
@@ -54,19 +63,26 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 values_text += func_skill_desc
             elif all(sval.get("Value") == svals[0].get("Value") for sval in svals):
                 # All values are the same
-                if is_np and np_function_type == NpFunctionType.OVERCHARGE:
+                if is_np and NpFunctionType.OVERCHARGE in np_function_type:
                     values_text = get_overcharge_values(function, buff_type, func_type)
                 else:
-                    values_text = f'Value: {get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
+                    is_single_value = True
+                    values_text = f'{get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
             else:
                 for svalIdx, sval in enumerate(svals):
                     valuesTextList.append(f'{get_sval_from_buff(sval.get("Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
-                np_text = " (Level)" if is_np and np_function_type == NpFunctionType.LEVEL else ""
+                np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
+                if is_np:
+                    if sval_target and func_type == "damageNpIndividual":
+                        supereffective_target = title_case(get_traits(session)[str(sval_target)])
+                    if NpFunctionType.OVERCHARGE in np_function_type:
+                        values_text += "\n" + get_overcharge_values(function, buff_type, func_type, True)
 
         if sval_rate and sval_rate != 1000 and sval_rate != 5000:
             chances_list = []
             if all(sval.get("Rate") == svals[0].get("Rate") for sval in svals):
+                # All values are the same
                 chances_text = f'Chance: {remove_zeros_decimal(svals[0].get("Rate") / 10)}%'
             else:
                 for svalIdx, sval in enumerate(svals):
@@ -89,21 +105,26 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
 
         turns_count_text = ", ".join([count_text, turns_text]).strip(", ")
         if turns_count_text: turns_count_text = f"({turns_count_text})"
+        
+        function_effect = function.get("funcPopupText")
+        inline_value_text = f" ({values_text})" if is_single_value else ""
             
         if func_type == "damageNp":
             skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
+        elif func_type == "damageNpIndividual":
+            skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}] with bonus damage to [{supereffective_target}]')
         elif not sub_skill:
-            skill_descs.append(f'**Effect {funcIdx + 1}**: {function.get("funcPopupText")} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
+            skill_descs.append(f'**Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
         else:
-            skill_descs.append(f'**↳Triggered Effect {funcIdx + 1}**: {function.get("funcPopupText")} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
+            skill_descs.append(f'**↳Triggered Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
 
         if chances_text: skill_descs.append(f'{chances_text}')
         if usechance_text: skill_descs.append(f'{usechance_text}')
-        if values_text: skill_descs.append(f'{values_text}')
+        if values_text and not is_single_value: skill_descs.append(f'{values_text}')
     return "\n".join(skill_descs)
 
 
-def get_overcharge_values(function, buff_type, func_type):
+def get_overcharge_values(function, buff_type, func_type, is_correction: bool = False):
     valuesTextList = []
     for svalIdx, sval in enumerate([
         function.get("svals")[0],
@@ -112,7 +133,7 @@ def get_overcharge_values(function, buff_type, func_type):
         function.get("svals4")[0],
         function.get("svals5")[0],
     ]):
-        valuesTextList.append(f'{get_sval_from_buff(sval.get("Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
+        valuesTextList.append(f'{get_sval_from_buff(sval.get("Correction" if is_correction else "Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
     values_text = f'Value (Overcharge): {" - ".join(valuesTextList)}'
     return values_text
 
@@ -121,7 +142,7 @@ def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
     if not buff_type:
         if func_type == ("gainNp"):
             return f'{remove_zeros_decimal(value / 100)}%'
-        elif func_type == ("damageNp"):
+        elif func_type.startswith("damageNp"):
             return f'{remove_zeros_decimal(value / 10)}%'
     if buff_type.startswith("up") or buff_type.startswith("down"):
         return f'{remove_zeros_decimal(value / 10)}%'
@@ -162,3 +183,15 @@ def get_skill_by_id(session: requests_cache.CachedSession, id: int, region: str 
         return None
     else:
         return skill
+
+def get_enums(session: requests_cache.CachedSession, enum_type: str):
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_enums.json")  # JP and NA use the same enums
+    enums = json.loads(response.text)
+    return enums.get(enum_type)
+
+
+def get_traits(session: requests_cache.CachedSession):
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
+    return json.loads(response.text)
