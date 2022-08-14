@@ -34,7 +34,12 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
     if not sub_skill and skill.get("coolDown"): skill_descs.append(f'**Base Cooldown: ** {skill.get("coolDown")[0]}')
     is_np = False
     if skill.get("card"): is_np = True # Noble phantasms
-    for funcIdx, function in enumerate(skill.get("functions")):
+    funcIdx = 0
+    for function in skill.get("functions"):
+        if function.get("funcTargetTeam") == "enemy": continue
+        func_type = function.get("funcType")
+        if func_type == "none": continue
+
         svals = function.get("svals")
         sval_rate = svals[0].get("Rate")
         sval_turns = svals[0].get("Turn")
@@ -49,13 +54,20 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         count_text = ""
         usechance_text = ""
         supereffective_target = ""
+        target_vals_text = ""
 
         np_function_type = NpFunctionType.NONE
         if is_np: np_function_type = get_np_function_type(function)
 
-        buff_type = function.get("buffs")[0].get("type") if function.get("buffs") and len(function.get("buffs")) > 0 else ""
-        func_type = function.get("funcType")
+        func_tvals = function.get("functvals")
+        if func_tvals:
+            target_traits = []
+            for tval in func_tvals:
+                if int(tval.get("id")) >= 5000: continue
+                target_traits.append(get_trait_desc(session, tval.get("id")))
+            target_vals_text = f' with trait [{", ".join(target_traits)}]'
 
+        buff_type = function.get("buffs")[0].get("type") if function.get("buffs") and len(function.get("buffs")) > 0 else ""
         is_single_value = False
         if sval_value:
             valuesTextList = []
@@ -77,7 +89,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
                 if is_np:
                     if sval_target and func_type == "damageNpIndividual":
-                        supereffective_target = title_case(get_traits(session)[str(sval_target)])
+                        supereffective_target = get_trait_desc(session, sval_target)
                     if NpFunctionType.OVERCHARGE in np_function_type:
                         values_text += "\n" + get_overcharge_values(function, buff_type, func_type, True)
 
@@ -88,7 +100,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 chances_text = f'Chance: {remove_zeros_decimal(svals[0].get("Rate") / 10)}%'
             else:
                 for svalIdx, sval in enumerate(svals):
-                    chances_list.append(f'{remove_zeros_decimal(sval.get("Rate") / 10)}{str(svalIdx + 1).translate(SUB)}')
+                    chances_list.append(f'{remove_zeros_decimal(sval.get("Rate") / 10)}{str(svalIdx + 1).translate(SUB)}%')
                 chances_text = f'Chance: {" · ".join(chances_list)}'
 
         if sval_userate and sval_userate != 1000 and sval_userate != 5000:
@@ -97,7 +109,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 usechance_text = f'Chance: {remove_zeros_decimal(svals[0].get("UseRate") / 10)}%'
             else:
                 for svalIdx, sval in enumerate(svals):
-                    usechances_list.append(f'{remove_zeros_decimal(sval.get("UseRate") / 10)}%{str(svalIdx + 1).translate(SUB)}')
+                    usechances_list.append(f'{remove_zeros_decimal(sval.get("UseRate") / 10)}%{str(svalIdx + 1).translate(SUB)}%')
                 usechance_text = f'Chance: {" · ".join(usechances_list)}'
 
         if sval_count and sval_count > 0:
@@ -109,20 +121,33 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         if turns_count_text: turns_count_text = f"({turns_count_text})"
         
         function_effect = function.get("funcPopupText")
+        if not function_effect: function_effect = title_case(func_type)
         inline_value_text = f" ({values_text})" if is_single_value else ""
+
+        sub_skill_text = "└Sub-" if sub_skill else ""
             
         if func_type == "damageNpIndividual":
-            skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}] with bonus damage to [{supereffective_target}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
-            skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
-        elif not sub_skill:
-            skill_descs.append(f'**Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
+        elif func_type.startswith("addState"):
+            function_effect = f'Grants [{title_case(buff_type)}]'
+            buff_tvals = function.get("buffs")[0].get("tvals")
+            if buff_tvals:
+                target_traits = []
+                for tval in buff_tvals:
+                    if int(tval.get("id")) >= 5000: continue
+                    target_traits.append(get_trait_desc(session, tval.get("id")))
+                function_effect += f' to [{", ".join(target_traits)}]'
+
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
         else:
-            skill_descs.append(f'**↳Triggered Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
 
         if chances_text: skill_descs.append(f'{chances_text}')
         if usechance_text: skill_descs.append(f'{usechance_text}')
         if values_text and not is_single_value: skill_descs.append(f'{values_text}')
+        funcIdx += 1
     return "\n".join(skill_descs)
 
 
@@ -149,7 +174,7 @@ def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
     if buff_type.startswith("up") or buff_type.startswith("down"):
         return f'{remove_zeros_decimal(value / 10)}%'
     if buff_type.startswith("regainNp"):
-        return remove_zeros_decimal(value / 100)
+        return f'{remove_zeros_decimal(value / 100)}%'
     if buff_type.startswith("donotAct"):
         return f'{remove_zeros_decimal(value / 10)}%'
     return remove_zeros_decimal(value)
@@ -166,6 +191,17 @@ def title_case(string):
     if len(words) > 0:
         words[0] = words[0][0].upper() + words[0][1:]
     return " ".join(words)
+
+
+def get_trait_desc(session: requests_cache.CachedSession, trait_id: str | int):
+    id = str(trait_id)
+    trait_name = get_traits(session).get(id)
+    trait_name = title_case(trait_name if trait_name else "unknown")
+    if id.startswith("4"):
+        # Cards
+        return trait_name
+    url = f'https://apps.atlasacademy.io/db/JP/entities?trait={id}'
+    return f'[{trait_name}]({url})'
 
 
 def get_skill_by_id(session: requests_cache.CachedSession, id: int, region: str = "JP"):

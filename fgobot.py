@@ -50,8 +50,7 @@ bot = interactions.Client(
 
 setup(bot)
 
-session = requests_cache.CachedSession()
-
+session = requests_cache.CachedSession(expire_after=360)
 
 def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     """Gets the servant info based on the search query.
@@ -123,17 +122,19 @@ def get_skill_by_id(id: int, region: str = "JP"):
 def create_servant_pages(servant, region):
     pages = []
 
+    servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("collectionNo")})'
+
     # Basic info
     embed = interactions.Embed(
         title="Basic Info",
-        description="",
+        description=servant_desc,
         color=0xf2aba6
     )
     faceAssetUrl = servant.get('extraAssets').get('faces').get('ascension').get('1')
     if faceAssetUrl == None:
         faceAssetUrl = servant.get('extraAssets').get('faces').get('ascension').get('0')
     embed.set_thumbnail(
-        url=faceAssetUrl
+        url=faceAssetUrl,
     )
 
     servant_name = servant.get('name')
@@ -179,28 +180,53 @@ def create_servant_pages(servant, region):
 
     # Skills
     if len(servant.get('skills')) > 0:
+        skill_descriptions = []
         embed = interactions.Embed(
             title="Skills",
-            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
             color=0xf2aba6
         )
         embed.set_thumbnail(
             url=faceAssetUrl
         )
 
+        skill_descriptions.append(servant_desc)
         # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
         for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
-            embed.add_field(
-                f"Skill {skill.get('num')}: {skill.get('name')}", get_skill_description(session, skill))
+            skill_descriptions.append("\n")
+            skill_descriptions.append(f"**Skill {skill.get('num')}: [{skill.get('name')}](https://apps.atlasacademy.io/db/JP/skill/{skill.get('id')})**")
+            skill_descriptions.append(get_skill_description(session, skill))
 
+        embed.description = "\n".join(skill_descriptions)
         embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Skills", embed))
+
+    # NPs
+    if len(servant.get("noblePhantasms")) > 0:
+        np_descriptions = []
+        embed = interactions.Embed(
+            title="Noble Phantasms",
+            color=0xf2aba6
+        )
+        embed.set_thumbnail(
+            url=faceAssetUrl
+        )
+        np_descriptions.append(servant_desc)
+        for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
+            np_descriptions.append("\n")
+            np_description = get_skill_description(session, noblePhantasm)  
+            np_url = f'https://apps.atlasacademy.io/db/JP/noble-phantasm/{noblePhantasm.get("id")}'
+            np_descriptions.append(f"**Noble Phantasm {i + 1}: [{noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})]({np_url})**")
+            np_descriptions.append(np_description)
+        
+        embed.description = "\n".join(np_descriptions)
+        embed.set_footer("Data via Atlas Academy")
+        pages.append(Page(f"Noble Phantasms", embed))
     
     # Skill materials
     if len(servant.get("skillMaterials")) > 0:
         embed = interactions.Embed(
             title="Skill Materials",
-            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            description=servant_desc,
             color=0xf2aba6
         )
         embed.set_thumbnail(
@@ -212,30 +238,9 @@ def create_servant_pages(servant, region):
                 itemUrl = f"https://apps.atlasacademy.io/db/{region}/item/{item.get('item').get('id')}"
                 skillMaterialText.append(f"[{item.get('item').get('name')}]({itemUrl}) x {item.get('amount')}")
             skillMaterialText.append(f"QP: {'{:,}'.format(skillMats.get('qp'))}")
-            embed.add_field(f"{int(id) - 1}→{id}:", "\n".join(skillMaterialText), True)
+            embed.add_field(f"{id}→{int(id) + 1}:", "\n".join(skillMaterialText), True)
         embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Skill Materials", embed))
-
-    # NPs
-    if len(servant.get("noblePhantasms")) > 0:
-        descriptions = []
-        embed = interactions.Embed(
-            title="Noble Phantasms",
-            color=0xf2aba6
-        )
-        embed.set_thumbnail(
-            url=faceAssetUrl
-        )
-        descriptions.append(f"{servant.get('name')} ({title_case(servant.get('className'))})")
-        for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
-            descriptions.append("\n")
-            np_description = get_skill_description(session, noblePhantasm)  
-            descriptions.append(f"**Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})**")
-            descriptions.append(np_description)
-        
-        embed.description = "\n".join(descriptions)
-        embed.set_footer("Data via Atlas Academy")
-        pages.append(Page(f"Noble Phantasms", embed))
 
     # Ascensions
     ascensions = servant.get("extraAssets").get("charaGraph").get("ascension")
@@ -246,7 +251,7 @@ def create_servant_pages(servant, region):
 
         embed = interactions.Embed(
             title=f"Ascension #{ascensionCount + 1}",
-            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
+            description=servant_desc,
             color=0xf2aba6
         )
 
