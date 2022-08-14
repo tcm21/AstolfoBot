@@ -951,6 +951,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str 
     await ctx.populate(populate_enum_list("NiceBuffType", buff2))
 
 
+@bot.autocomplete(command="servant", name="region")
 @bot.autocomplete(command="find", name="region")
 @bot.autocomplete(command="region", name="region")
 @bot.autocomplete(command="support", name="region")
