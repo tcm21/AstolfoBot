@@ -963,7 +963,7 @@ async def on_start():
     status_task.start()
 
 
-@create_task(IntervalTrigger(60))
+@create_task(IntervalTrigger(600))
 async def status_task():
     await bot.change_presence(new_presence())
 
