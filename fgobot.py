@@ -3,12 +3,11 @@ import json
 import interactions
 import requests_cache
 import os
-import re
 
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
 
-from text_builders import get_skill_description
+from text_builders import get_skill_description, title_case
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -215,19 +214,22 @@ def create_servant_pages(servant, region):
 
     # NPs
     if len(servant.get("noblePhantasms")) > 0:
+        descriptions = []
         embed = interactions.Embed(
             title="Noble Phantasms",
-            description=f"{servant.get('name')} ({title_case(servant.get('className'))})",
             color=0xf2aba6
         )
         embed.set_thumbnail(
             url=faceAssetUrl
         )
+        descriptions.append(f"{servant.get('name')} ({title_case(servant.get('className'))})")
         for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
-            embed.add_field(
-                f"Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})",
-                noblePhantasm.get('detail')
-            )
+            descriptions.append("\n")
+            np_description = get_skill_description(session, noblePhantasm)  
+            descriptions.append(f"**Noble Phantasm {i + 1}: {noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})**")
+            descriptions.append(np_description)
+        
+        embed.description = "\n".join(descriptions)
         embed.set_footer("Data via Atlas Academy")
         pages.append(Page(f"Noble Phantasms", embed))
 
@@ -842,15 +844,6 @@ def get_traits():
     response = session.get(
         f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
     return json.loads(response.text)
-
-
-def title_case(string):
-    if not string:
-        return
-    words = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', string)).split()
-    if len(words) > 0:
-        words[0] = words[0][0].upper() + words[0][1:]
-    return " ".join(words)
 
 
 def populate_enum_list(enumName: str, input_value: str):
