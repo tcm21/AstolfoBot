@@ -171,6 +171,8 @@ def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
             return f'{remove_zeros_decimal(value / 100)}%'
         elif func_type.startswith("damageNp"):
             return f'{remove_zeros_decimal(value / 10)}%'
+    if buff_type == "upChagetd":
+        return remove_zeros_decimal(value)
     if buff_type.startswith("up") or buff_type.startswith("down"):
         return f'{remove_zeros_decimal(value / 10)}%'
     if buff_type.startswith("regainNp"):
