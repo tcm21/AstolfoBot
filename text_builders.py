@@ -15,13 +15,15 @@ class NpFunctionType(Flag):
 def get_np_function_type(function) -> NpFunctionType:
     svals = function.get("svals")
     svals2 = function.get("svals2")
-    if svals[0].get("Value") != svals[1].get("Value") and svals[0].get("Value") != svals2[1].get("Value"):
+    if (svals[0].get("Value") != svals[1].get("Value") and
+        (svals[0].get("Value") != svals2[0].get("Value") or svals[0].get("Correction") != svals2[0].get("Correction"))
+        ):
         return NpFunctionType.BOTH
 
     if svals[0].get("Value") != svals[1].get("Value"):
         return NpFunctionType.LEVEL
     
-    if svals[0].get("Value") != svals2[1].get("Value"):
+    if svals[0].get("Value") != svals2[0].get("Value") or svals[0].get("Correction") != svals2[0].get("Correction"):
         return NpFunctionType.OVERCHARGE
     
     return NpFunctionType.NONE
@@ -109,10 +111,10 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         function_effect = function.get("funcPopupText")
         inline_value_text = f" ({values_text})" if is_single_value else ""
             
-        if func_type == "damageNp":
-            skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
-        elif func_type == "damageNpIndividual":
+        if func_type == "damageNpIndividual":
             skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}] with bonus damage to [{supereffective_target}]')
+        elif func_type.startswith("damageNp"):
+            skill_descs.append(f'**Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
         elif not sub_skill:
             skill_descs.append(f'**Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}] {turns_count_text}')
         else:
