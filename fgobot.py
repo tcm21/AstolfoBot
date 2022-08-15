@@ -845,7 +845,7 @@ async def support(
 async def gacha(
     ctx: interactions.CommandContext,
     number_of_quartz: str,
-    chance: str = "0.008",
+    chance: str = "0.8",
 ):
     embed = interactions.Embed(
         title="Gacha chance",
@@ -859,7 +859,7 @@ async def gacha(
         url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
     )
 
-    result_text = roll(int(number_of_quartz), float(chance))
+    result_text = roll(int(number_of_quartz), float(chance) / 100)
     embed.description = result_text
     await ctx.send(embeds=embed)
 

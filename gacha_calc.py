@@ -33,5 +33,6 @@ def roll(number_of_quartz: int, p: float = 0.008) -> str:
         text = f'NP{str(r_values[i])}+: {get_percentage_text(sum)}'
         result_text.append(text)
 
-    result_text.append(f'NP6+: {get_percentage_text(prob_sum)}')
+    if n >= 6:
+        result_text.append(f'NP6+: {get_percentage_text(prob_sum)}')
     return "\n".join(result_text)
