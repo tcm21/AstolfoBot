@@ -132,13 +132,20 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
         elif func_type.startswith("addState"):
             function_effect = f'Grants [{title_case(buff_type)}]'
-            buff_tvals = function.get("buffs")[0].get("tvals")
-            if buff_tvals:
+
+            func_quest_tvals = function.get("funcquestTvals") # Fields
+            if func_quest_tvals:
                 target_traits = []
-                for tval in buff_tvals:
-                    if int(tval.get("id")) >= 5000: continue
-                    target_traits.append(get_trait_desc(session, tval.get("id")))
-                function_effect += f' to [{", ".join(target_traits)}]'
+                for tval in func_quest_tvals:
+                    target_traits.append(title_case(tval.get("name")))
+                if len(target_traits) > 0: function_effect += f' on [{", ".join(target_traits)}]'
+
+            ck_self_indv = function.get("buffs")[0].get("ckSelfIndv") # Cards
+            if ck_self_indv:
+                target_traits = []
+                for ck in ck_self_indv:
+                    target_traits.append(title_case(ck.get("name")))
+                if len(target_traits) > 0: function_effect += f' to [{", ".join(target_traits)}]'
 
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
         else:
