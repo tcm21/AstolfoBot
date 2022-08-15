@@ -593,7 +593,7 @@ async def servant(
     region: str = ""
 ):
     if not servantName and not cv and not className:
-        await ctx.send("Invalid input.")
+        await ctx.send(content="Invalid input.", ephemeral=True)
         return
 
     if not region and default_regions.get(ctx.guild_id) == None:
@@ -692,7 +692,7 @@ async def skill(
     region: str = "",
 ):
     if not type and not type2 and not target and not buff and not buff2 and not trait:
-        await ctx.send("Invalid input.")
+        await ctx.send(content="Invalid input.", ephemeral=True)
         return
 
     if not region and default_regions.get(ctx.guild_id) == None:
@@ -727,7 +727,7 @@ async def np(
     region: str = "",
 ):
     if not type and not type2 and not target and not buff and not buff2 and not trait:
-        await ctx.send("Invalid input.")
+        await ctx.send(content="Invalid input.", ephemeral=True)
         return
 
     if not region and default_regions.get(ctx.guild_id) == None:
@@ -763,7 +763,7 @@ async def skillOrNp(
     region: str = "",
 ):
     if not type and not type2 and not target and not buff and not buff2 and not trait:
-        await ctx.send("Invalid input.")
+        await ctx.send(content="Invalid input.", ephemeral=True)
         return
 
     if not region and default_regions.get(ctx.guild_id) == None:
@@ -789,7 +789,7 @@ async def support(
     region: str = "",
 ):
     if not friend_code:
-        await ctx.send("Invalid input.")
+        await ctx.send(content="Invalid input.", ephemeral=True)
         return
 
     if not region and default_regions.get(ctx.guild_id) == None:
@@ -841,16 +841,29 @@ async def support(
     description="Check your chances of getting a servant"
 )
 @interactions.option(str, name="number-of-quartz", description="Number of quartz", required=True)
+@interactions.option(str, name="number-of-tickets", description="Number of tickets. Default: 0", required=False)
 @interactions.option(str, name="chance", description="Servant probability (In percent). Default: 0.8%", required=False)
 async def gacha(
     ctx: interactions.CommandContext,
     number_of_quartz: str,
+    number_of_tickets: str = "0",
     chance: str = "0.8",
 ):
     embed = interactions.Embed(
         title="Gacha chance",
         color=0xf2aba6
     )
+
+    def is_float(element) -> bool:
+        try:
+            float(element)
+            return True
+        except ValueError:
+            return False
+
+    if not is_float(number_of_quartz) or not is_float(number_of_tickets) or not is_float(chance):
+        await ctx.send(content="Invalid input.", ephemeral=True)
+        return
 
     response = session.get(
         f"https://api.atlasacademy.io/nice/JP/equip/9807190")
@@ -859,7 +872,7 @@ async def gacha(
         url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
     )
 
-    result_text = roll(int(number_of_quartz), float(chance) / 100)
+    result_text = roll(int(number_of_quartz), int(number_of_tickets), float(chance) / 100)
     embed.description = result_text
     await ctx.send(embeds=embed)
 
