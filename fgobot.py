@@ -8,6 +8,7 @@ import os
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
+from gacha_calc import roll
 
 from text_builders import get_skill_description, title_case, get_enums, get_traits
 
@@ -836,6 +837,32 @@ async def support(
 
     await send_paginator(ctx, pages)
 
+@bot.command(
+    description="Check your chances of getting a servant"
+)
+@interactions.option(str, name="number-of-quartz", description="Number of quartz", required=True)
+@interactions.option(str, name="chance", description="Servant probability (In percent). Default: 0.8%", required=False)
+async def gacha(
+    ctx: interactions.CommandContext,
+    number_of_quartz: str,
+    chance: str = "0.008",
+):
+    embed = interactions.Embed(
+        title="Gacha chance",
+        color=0xf2aba6
+    )
+
+    response = session.get(
+        f"https://api.atlasacademy.io/nice/JP/equip/9807190")
+    ce = json.loads(response.text)
+    embed.set_thumbnail(
+        url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
+    )
+
+    result_text = roll(int(number_of_quartz), float(chance))
+    embed.description = result_text
+    await ctx.send(embeds=embed)
+
 
 async def send_paginator(ctx: interactions.CommandContext, pages):
     """ Creates a paginator for the pages
@@ -889,7 +916,6 @@ def populate_traits(input_value: str):
     return choices
 
 # Load CV list
-session = requests_cache.CachedSession()
 response = session.get(
     f"https://api.atlasacademy.io/export/JP/nice_cv.json")
 cv_list_jp = json.loads(response.text)
