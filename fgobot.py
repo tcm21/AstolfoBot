@@ -75,7 +75,7 @@ def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     if class_name:
         clsNameQuery= f"&className={class_name}"
     response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/servant/search?{nameQuery}{cvQuery}{clsNameQuery}")
+        f"https://api.atlasacademy.io/basic/{region}/svt/search?{nameQuery}{cvQuery}{clsNameQuery}&type=normal&type=heroine")
     servants = json.loads(response.text)
     if not isinstance(servants, list):
         servants = []
@@ -93,7 +93,7 @@ def get_servant_by_id(id: int, region: str = "JP"):
         Servant object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/servant/{id}?lore=true")
+        f"https://api.atlasacademy.io/nice/{region}/svt/{id}?lore=true")
     servant = json.loads(response.text)
     if servant.get('detail') == "Svt not found":
         return None
@@ -123,7 +123,7 @@ def get_skill_by_id(id: int, region: str = "JP"):
 def create_servant_pages(servant, region):
     pages = []
 
-    servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("collectionNo")})'
+    servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})'
 
     # Basic info
     embed = interactions.Embed(
@@ -173,8 +173,9 @@ def create_servant_pages(servant, region):
         embed.add_field("Voice Actor", servant.get("profile").get("cv"), True)
     else:
         embed.add_field("Voice Actor", "N/A", True)
-    embed.add_field("Illustrator", servant.get(
-        "profile").get("illustrator"), True)
+    if servant.get("profile") and servant.get("profile").get("illustrator"):
+        embed.add_field("Illustrator", servant.get(
+            "profile").get("illustrator"), True)
 
     embed.set_footer("Data via Atlas Academy")
     pages.append(Page(f"Basic Info", embed))
@@ -615,7 +616,7 @@ async def servant(
         options = []
         for index, servant in enumerate(servants):
             options.append(interactions.SelectOption(
-                label=f"{index + 1}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
+                label=f"{servant.get('id')}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
         select_menu = interactions.SelectMenu(
             options=options,
             placeholder="Select one...",
