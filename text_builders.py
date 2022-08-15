@@ -81,7 +81,10 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                     values_text = get_overcharge_values(function, buff_type, func_type)
                 else:
                     is_single_value = True
-                    values_text = f'{get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
+                    if buff_type == "addIndividuality":
+                        values_text = f'{get_trait_desc(session, svals[0].get("Value"))}'
+                    else:
+                        values_text = f'{get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
             else:
                 for svalIdx, sval in enumerate(svals):
                     valuesTextList.append(f'{get_sval_from_buff(sval.get("Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
@@ -146,6 +149,13 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 for ck in ck_self_indv:
                     target_traits.append(title_case(ck.get("name")))
                 if len(target_traits) > 0: function_effect += f' to [{", ".join(target_traits)}]'
+            
+            ck_op_indv = function.get("buffs")[0].get("ckOpIndv") # Atk bonus for trait
+            if ck_op_indv:
+                target_traits = []
+                for ck in ck_op_indv:
+                    target_traits.append(get_trait_desc(session, ck.get("id")))
+                if len(target_traits) > 0: function_effect += f' against [{", ".join(target_traits)}]'
 
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
         else:
@@ -174,10 +184,12 @@ def get_overcharge_values(function, buff_type, func_type, is_correction: bool = 
 
 def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
     if not buff_type:
-        if func_type == ("gainNp"):
+        if func_type == "gainNp":
             return f'{remove_zeros_decimal(value / 100)}%'
         elif func_type.startswith("damageNp"):
             return f'{remove_zeros_decimal(value / 10)}%'
+        elif func_type == "lossNp":
+            return f'{remove_zeros_decimal(value / 100)}%'
     if buff_type == "upChagetd":
         return remove_zeros_decimal(value)
     if buff_type.startswith("up") or buff_type.startswith("down"):
