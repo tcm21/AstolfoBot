@@ -482,7 +482,7 @@ def get_skills(
                 skillName = skill_details.get('name')
                 embed_desc.append("")
                 embed_desc.append(f'**{totalCount}: [{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})**')
-                embed_desc.append(f"**Skill {skill_details.get('num')}: [{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})**")
+                embed_desc.append(f"**{'Skill' if flag == 'skill' else 'NP'} {skill_details.get('num')}: [{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})**")
                 embed_desc.append(get_skill_description(session, skill_details, False, region))
                 
                 pageCount += 1
@@ -707,11 +707,11 @@ async def find_logic(
 
 
 @bot.command()
-async def find(ctx: interactions.CommandContext):
+async def search(ctx: interactions.CommandContext):
     pass
 
 
-@find.subcommand(
+@search.subcommand(
     description="Search for servants with skills that matches the specified parameters",
 )
 @interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
@@ -732,7 +732,7 @@ async def skill(
     await send_paginator(ctx, pages)
 
 
-@find.subcommand(
+@search.subcommand(
     description="Search for servants with NP that matches the specified parameters",
 )
 @interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
@@ -753,7 +753,7 @@ async def np(
     await send_paginator(ctx, pages)
 
 
-@find.subcommand(
+@search.subcommand(
     description="Search for servants with NP and/or skills that matches the specified parameters",
     name="skill-or-np"
 )
@@ -991,28 +991,28 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, className: 
     await ctx.populate(populate_enum_list("SvtClass", className))
 
 
-@bot.autocomplete(command="find", name="effect")
+@bot.autocomplete(command="search", name="effect")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
     await ctx.populate(populate_type_list(type))
 
 
-@bot.autocomplete(command="find", name="effect2")
+@bot.autocomplete(command="search", name="effect2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
     await ctx.populate(populate_type_list(type2))
 
 
-@bot.autocomplete(command="find", name="target")
+@bot.autocomplete(command="search", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
     await ctx.populate(populate_target_list(target))
 
 
-@bot.autocomplete(command="find", name="trait")
+@bot.autocomplete(command="search", name="trait")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
     await ctx.populate(populate_traits(trait))
 
 
 @bot.autocomplete(command="servant", name="region")
-@bot.autocomplete(command="find", name="region")
+@bot.autocomplete(command="search", name="region")
 @bot.autocomplete(command="region", name="region")
 @bot.autocomplete(command="support", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
