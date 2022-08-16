@@ -29,7 +29,7 @@ def get_np_function_type(function) -> NpFunctionType:
     return NpFunctionType.NONE
 
 
-def get_skill_description(session: requests_cache.CachedSession, skill, sub_skill: bool = False):
+def get_skill_description(session: requests_cache.CachedSession, skill, sub_skill: bool = False, region: str = "JP"):
     skill_descs = []
     if not sub_skill and skill.get("coolDown"): skill_descs.append(f'**Base Cooldown: ** {skill.get("coolDown")[0]}')
     is_np = False
@@ -81,8 +81,10 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                     values_text = get_overcharge_values(function, buff_type, func_type)
                 else:
                     is_single_value = True
-                    if buff_type == "addIndividuality":
-                        values_text = f'{get_trait_desc(session, svals[0].get("Value"))}'
+                    if buff_type == "addIndividuality": # Add trait
+                        values_text = f'{get_trait_desc(session, svals[0].get("Value"), region)}'
+                    elif buff_type == "fieldIndividuality": # Change fields
+                        values_text = f'{get_field_desc(session, svals[0].get("Value"), region)}'
                     else:
                         values_text = f'{get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
             else:
@@ -92,7 +94,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
                 if is_np:
                     if sval_target and func_type == "damageNpIndividual":
-                        supereffective_target = get_trait_desc(session, sval_target)
+                        supereffective_target = get_trait_desc(session, sval_target, region)
                     if NpFunctionType.OVERCHARGE in np_function_type:
                         values_text += "\n" + get_overcharge_values(function, buff_type, func_type, True)
 
@@ -123,24 +125,28 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         turns_count_text = ", ".join([count_text, turns_text]).strip(", ")
         if turns_count_text: turns_count_text = f"({turns_count_text})"
         
-        function_effect = function.get("funcPopupText")
+        function_effect = func_desc_dict.get(func_type)
         if not function_effect: function_effect = title_case(func_type)
         inline_value_text = f" ({values_text})" if is_single_value else ""
 
         sub_skill_text = "└Sub-" if sub_skill else ""
-            
+        
+        func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
+        if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
         if func_type == "damageNpIndividual":
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}] with bonus damage to [{supereffective_target}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{func_target_text}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{title_case(function.get("funcTargetType"))}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{func_target_text}]')
         elif func_type.startswith("addState"):
-            function_effect = f'Grants [{title_case(buff_type)}]'
+            buff_text = buff_desc_dict.get(buff_type)
+            if not buff_text: buff_text = title_case(buff_type)
+            function_effect = f'Grants [{buff_text}]'
 
             func_quest_tvals = function.get("funcquestTvals") # Fields
             if func_quest_tvals:
                 target_traits = []
                 for tval in func_quest_tvals:
-                    target_traits.append(title_case(tval.get("name")))
+                    target_traits.append(get_field_desc(session, tval.get("id"), region))
                 if len(target_traits) > 0: function_effect += f' on [{", ".join(target_traits)}]'
 
             ck_self_indv = function.get("buffs")[0].get("ckSelfIndv") # Cards
@@ -155,15 +161,15 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 target_traits = []
                 for ck in ck_op_indv:
                     if int(ck.get("id")) < 3000:
-                        trait_desc = get_trait_desc(session, ck.get("id"))
+                        trait_desc = get_trait_desc(session, ck.get("id"), region)
                     else:
                         trait_desc = title_case(ck.get("name"))
                     target_traits.append(trait_desc)
                 if len(target_traits) > 0: function_effect += f' against [{", ".join(target_traits)}]'
 
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
         else:
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
 
         if chances_text: skill_descs.append(f'{chances_text}')
         if usechance_text: skill_descs.append(f'{usechance_text}')
@@ -211,21 +217,32 @@ def remove_zeros_decimal(value):
 
 def title_case(string):
     if not string:
-        return
+        return string
     words = re.sub('([A-Z][a-z]+)', r' \1', re.sub('([A-Z]+)', r' \1', string)).split()
     if len(words) > 0:
         words[0] = words[0][0].upper() + words[0][1:]
     return " ".join(words)
 
 
-def get_trait_desc(session: requests_cache.CachedSession, trait_id: str | int):
+def get_trait_desc(session: requests_cache.CachedSession, trait_id: str | int, region: str = "JP"):
     id = str(trait_id)
     trait_name = get_traits(session).get(id)
     trait_name = title_case(trait_name if trait_name else "unknown")
     if id.startswith("4"):
         # Cards
         return trait_name
-    url = f'https://apps.atlasacademy.io/db/JP/entities?trait={id}'
+    url = f'https://apps.atlasacademy.io/db/{region}/entities?trait={id}'
+    return f'[{trait_name}]({url})'
+
+
+def get_field_desc(session: requests_cache.CachedSession, trait_id: str | int, region: str = "JP"):
+    id = str(trait_id)
+    trait_name = get_traits(session).get(id)
+    trait_name = title_case(trait_name if trait_name else "unknown")
+    if id.startswith("4"):
+        # Cards
+        return trait_name
+    url = f'https://apps.atlasacademy.io/db/{region}/quests?fieldIndividuality={id}'
     return f'[{trait_name}]({url})'
 
 
@@ -258,3 +275,191 @@ def get_traits(session: requests_cache.CachedSession):
     response = session.get(
         f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
     return json.loads(response.text)
+
+
+func_desc_dict = {
+    "absorbNpturn": "Absorb NP Charge",
+    "addState": "Apply Buff",
+    "addStateShort": "Apply Buff (short)",
+    "cardReset": "Shuffle Cards",
+    "changeBgmCostume": "Change BGM",
+    "damageNp": "Deal Damage",
+    "damageNpHpratioLow": "Deal Damage with Bonus for Low Health",
+    "damageNpIndividual": "Deal Damage with Bonus to Trait",
+    "damageNpIndividualSum": "Deal Damage with Bonus per Trait",
+    "damageNpPierce": "Deal Damage that pierces defense",
+    "damageNpRare": "Deal Damage with Bonus to Rarity",
+    "damageNpStateIndividualFix": "Deal Damage with Bonus to Trait",
+    "damageNpCounter": "Reflect Damage Received",
+    "damageValue": "Deal Damage",
+    "delayNpturn": "Drain Charge",
+    "eventDropUp": "Increase Drop Amount",
+    "eventPointUp": "Increase Drop Amount",
+    "eventDropRateUp": "Increase Drop Rate",
+    "eventPointRateUp": "Increase Drop Rate",
+    "enemyEncountCopyRateUp": "Create Clone of Enemy",
+    "enemyEncountRateUp": "Improve Appearance Rate of Enemy",
+    "expUp": "Increase Master Exp",
+    "extendSkill": "Increase Cooldowns",
+    "fixCommandcard": "Lock Command Cards",
+    "friendPointUp": "Increase Friend Point",
+    "friendPointUpDuplicate": "Increase Friend Point (stackable)",
+    "forceInstantDeath": "Force Instant Death",
+    "gainHp": "Restore HP",
+    "gainHpFromTargets": "Absorb HP",
+    "gainHpPer": "Restore HP to Percent",
+    "gainNp": "Charge NP",
+    "gainNpBuffIndividualSum": "Charge NP per Trait",
+    "gainNpFromTargets": "Absorb NP Charge",
+    "gainStar": "Gain Critical Stars",
+    "hastenNpturn": "Increase Charge",
+    "instantDeath": "Apply Death",
+    "lossHp": "Drain HP",
+    "lossHpSafe": "Drain HP without killing",
+    "lossNp": "Drain NP",
+    "lossStar": "Remove Critical Stars",
+    "moveState": "Move Effects",
+    "moveToLastSubmember": "Move to last reserve slot",
+    "none": "No Effect",
+    "qpDropUp": "Increase QP Reward",
+    "qpUp": "Increase QP Reward",
+    "replaceMember": "Swap members",
+    "servantFriendshipUp": "Increase Bond Gain",
+    "shortenSkill": "Reduce Cooldowns",
+    "subState": "Remove Effects",
+    "userEquipExpUp": "Increase Mystic Code Exp",
+    "func126": "Remove Command Spell",
+    "addFieldChangeToField": "Change Field",
+    "subFieldBuff": "Remove Field Buff",
+}
+
+buff_desc_dict = {
+    "addMaxhp": "Max HP Up",
+    "subMaxhp": "Max HP Down",
+    "upAtk": "ATK Up",
+    "downAtk": "ATK Down",
+    "upChagetd": "Overcharge Up",
+    "upCommandall": "Card Up",
+    "downCommandall": "Card Down",
+    "upCommandatk": "ATK Up",
+    "downCommandatk": "ATK Down",
+    "upCriticaldamage": "Critical Damage Up",
+    "downCriticaldamage": "Critical Damage Down",
+    "upCriticalpoint": "Star Drop Rate Up",
+    "downCriticalpoint": "Star Drop Rate Down",
+    "upCriticalrate": "Critical Rate Up",
+    "downCriticalrate": "Critical Rate Down",
+    "upCriticalRateDamageTaken": "Chance of Receiving Critical Attack Up",
+    "downCriticalRateDamageTaken": "Chance of Receiving Critical Attack Down",
+    "upCriticalStarDamageTaken": "Attacker Star Drop Rate Up",
+    "downCriticalStarDamageTaken": "Attacker Star Drop Rate Down",
+    "upDamage": "SP.DMG Up",
+    "downDamage": "SP.DMG Down",
+    "upDamageIndividualityActiveonly": "SP.DMG Up",
+    "downDamageIndividualityActiveonly": "SP.DMG Down",
+    "upDamageEventPoint": "SP.DMG Up",
+    "upDamagedropnp": "NP Gain When Damaged Up",
+    "downDamagedropnp": "NP Gain When Damaged Down",
+    "upDefence": "DEF Up",
+    "downDefence": "DEF Down",
+    "upDefencecommandall": "Resistance Up",
+    "downDefencecommandall": "Resistance Down",
+    "upDropnp": "NP Gain Up",
+    "downDropnp": "NP Gain Down",
+    "upGainHp": "Received Healing Up",
+    "downGainHp": "Received Healing Down",
+    "upGivegainHp": "Healing Dealt Up",
+    "downGivegainHp": "Healing Dealt Down",
+    "upFuncHpReduce": "DoT Effectiveness Up",
+    "downFuncHpReduce": "DoT Effectiveness Down",
+    "upGrantInstantdeath": "Death Chance Up",
+    "downGrantInstantdeath": "Death Chance Down",
+    "upResistInstantdeath": "Death Resist Up",
+    "upGrantstate": "Casted Effect Chance Up",
+    "downGrantstate": "Casted Effect Chance Down",
+    "upNonresistInstantdeath": "Death Resist Down",
+    "upNpdamage": "NP Damage Up",
+    "downNpdamage": "NP Damage Down",
+    "upSpecialdefence": "SP.DEF Up",
+    "downSpecialdefence": "SP.DEF Down",
+    "upDamageSpecial": "Attack Special Damage Up",
+    "upStarweight": "Star Weight Up",
+    "downStarweight": "Star Weight Down",
+    "downTolerance": "Received Effect Chance Up",
+    "upTolerance": "Received Effect Chance Down",
+    "upToleranceSubstate": "Buff Removal Resistance Up",
+    "downToleranceSubstate": "Buff Removal Resistance Down",
+    "buffRate": "Buff Effectiveness Up",
+    "avoidInstantdeath": "Immune to Death",
+    "avoidState": "Immunity",
+    "addDamage": "Damage Plus",
+    "addIndividuality": "Add Trait",
+    "avoidance": "Evade",
+    "avoidanceIndividuality": "Evade",
+    "changeCommandCardType": "Change Command Card Types",
+    "commandcodeattackFunction": "Command Code Effect",
+    "commandcodeattackAfterFunction": "Command Code After Effect",
+    "breakAvoidance": "Sure Hit",
+    "delayFunction": "Trigger Skill after Duration",
+    "donotAct": "Unable to Act",
+    "donotNoble": "NP Seal",
+    "donotNobleCondMismatch": "NP Block if Condition Failed",
+    "donotRecovery": "Recovery Disabled",
+    "donotReplace": "No Order Change",
+    "donotSelectCommandcard": "Do Not Shuffle In Cards",
+    "donotSkill": "Skill Seal",
+    "donotSkillSelect": "Skill Seal",
+    "fieldIndividuality": "Change Field Type",
+    "fixCommandcard": "Freeze Command Cards",
+    "guts": "Guts",
+    "gutsFunction": "Trigger Skill on Guts",
+    "gutsRatio": "Guts",
+    "invincible": "Invincible",
+    "multiattack": "Multiple Hits",
+    "pierceInvincible": "Ignore Invincible",
+    "pierceDefence": "Ignore DEF",
+    "preventDeathByDamage": "Prevent death by damage",
+    "reflectionFunction": "Trigger Skill on end of enemy's turn",
+    "regainHp": "HP Per Turn",
+    "regainNp": "NP Per Turn",
+    "regainStar": "Stars Per Turn",
+    "selfturnendFunction": "Trigger Skill every Turn",
+    "specialInvincible": "Special invincible",
+    "subSelfdamage": "Damage Cut",
+    "tdTypeChange": "Change Noble Phantasm",
+    "tdTypeChangeArts": "Set Noble Phantasm: Arts",
+    "tdTypeChangeBuster": "Set Noble Phantasm: Buster",
+    "tdTypeChangeQuick": "Set Noble Phantasm: Quick",
+    "upHate": "Taunt",
+    "upNpturnval": "Increase NP Gauge Gained Per Turn",
+    "downNpturnval": "Reduce NP Gauge Gained Per Turn",
+}
+
+target_desc_dict = {
+    "self": "self",
+    "ptOne": "one party member",
+    "ptAll": "party",
+    "enemy": "one enemy",
+    "enemyAll": "all enemies",
+    "ptFull": "party (including reserve)",
+    "enemyFull": "all enemies (including reserve)",
+    "ptOther": "party except self",
+    "ptOneOther": "another party member besides target",
+    "ptRandom": "one random party member",
+    "enemyOther": "other enemies besides target",
+    "enemyRandom": "one random enemy",
+    "ptOtherFull": "party except self (including reserve)",
+    "enemyOtherFull": "other enemies (including reserve)",
+    "ptselectOneSub": "active party member and reserve party member",
+    "ptselectSub": "reserve party member",
+    "ptOneAnotherRandom": "another random party member",
+    "ptSelfAnotherRandom": "another random party member (except self)",
+    "enemyOneAnotherRandom": "other random enemy",
+    "ptSelfAnotherFirst": "first other party member (except self)",
+    "ptSelfAnotherLast": "last other party member (except self)",
+    "ptOneHpLowestValue": "party member with the lowest HP",
+    "ptOneHpLowestRate": "party member with the lowest HP relative to their max HP",
+    "commandTypeSelfTreasureDevice": "target noble phantasm version",
+    "fieldOther": "party and enemies except self",
+    "enemyOneNoTargetNoAction": "entity that last dealt damage to self",
+}

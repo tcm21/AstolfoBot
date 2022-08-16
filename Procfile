@@ -1,1 +1,1 @@
-worker: python3 fgobot.py
+worker: python3 main.py
