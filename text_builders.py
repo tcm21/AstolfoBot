@@ -73,7 +73,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             valuesTextList = []
             if buff_type.endswith("Function"):
                 func_skill = get_skill_by_id(session, sval_value)
-                func_skill_desc = get_skill_description(session=session, skill=func_skill, sub_skill=True)
+                func_skill_desc = get_skill_description(session=session, skill=func_skill, sub_skill=True, region=region)
                 values_text += func_skill_desc
             elif all(sval.get("Value") == svals[0].get("Value") for sval in svals):
                 # All values are the same
@@ -97,6 +97,13 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                         supereffective_target = get_trait_desc(session, sval_target, region)
                     if NpFunctionType.OVERCHARGE in np_function_type:
                         values_text += "\n" + get_overcharge_values(function, buff_type, func_type, True)
+        else:
+            if buff_type == "counterFunction":
+                # Bazett
+                counter_id = svals[0].get("CounterId")
+                func_skill = get_np_by_id(session, counter_id, region)
+                func_skill_desc = get_skill_description(session=session, skill=func_skill, sub_skill=True, region=region)
+                values_text += func_skill_desc
 
         if sval_rate and sval_rate != 1000 and sval_rate != 5000:
             chances_list = []
@@ -134,9 +141,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
         if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
         if func_type == "damageNpIndividual":
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{func_target_text}] with bonus damage to [{supereffective_target}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: Deals damage to [{func_target_text}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect} to [{func_target_text}]')
         elif func_type.startswith("addState"):
             buff_text = buff_desc_dict.get(buff_type)
             if not buff_text: buff_text = title_case(buff_type)
@@ -263,6 +270,26 @@ def get_skill_by_id(session: requests_cache.CachedSession, id: int, region: str 
         return None
     else:
         return skill
+
+
+def get_np_by_id(session: requests_cache.CachedSession, id: int, region: str = "JP"):
+    """Get NP by ID
+
+    Args:
+        id (int): NP ID
+        region (str, optional): Region. Defaults to "JP".
+
+    Returns:
+        Skill object
+    """
+    response = session.get(
+        f"https://api.atlasacademy.io/nice/{region}/NP/{id}")
+    skill = json.loads(response.text)
+    if skill.get('detail') == "NP not found":
+        return None
+    else:
+        return skill
+
 
 def get_enums(session: requests_cache.CachedSession, enum_type: str):
     response = session.get(

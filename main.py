@@ -217,7 +217,10 @@ def create_servant_pages(servant, region):
             np_descriptions.append("\n")
             np_description = get_skill_description(session, noblePhantasm, False, region)  
             np_url = f'https://apps.atlasacademy.io/db/JP/noble-phantasm/{noblePhantasm.get("id")}'
-            np_descriptions.append(f"**Noble Phantasm {i + 1}: [{noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})]({np_url})**")
+            np_descriptions.append(f"**Noble Phantasm {i + 1}:**")
+            np_descriptions.append(f"[{noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})]({np_url})")
+            if noblePhantasm.get("ruby") and noblePhantasm.get("name") != noblePhantasm.get("ruby"):
+                np_descriptions.append(noblePhantasm.get("ruby"))
             np_descriptions.append(np_description)
         
         embed.description = "\n".join(np_descriptions)
