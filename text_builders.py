@@ -154,7 +154,11 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             if ck_op_indv:
                 target_traits = []
                 for ck in ck_op_indv:
-                    target_traits.append(get_trait_desc(session, ck.get("id")))
+                    if int(ck.get("id")) < 3000:
+                        trait_desc = get_trait_desc(session, ck.get("id"))
+                    else:
+                        trait_desc = title_case(ck.get("name"))
+                    target_traits.append(trait_desc)
                 if len(target_traits) > 0: function_effect += f' against [{", ".join(target_traits)}]'
 
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{title_case(function.get("funcTargetType"))}]{target_vals_text} {turns_count_text}')
