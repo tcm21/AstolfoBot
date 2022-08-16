@@ -414,7 +414,7 @@ def get_traits(session: requests_cache.CachedSession):
 
 
 func_desc_dict = {
-    "absorbNpturn": "Absorb NP Charge",
+    "absorbNpturn": "Absorb NP Charge (Enemy)",
     "addState": "Apply Buff",
     "addStateShort": "Apply Buff (short)",
     "cardReset": "Shuffle Cards",
@@ -429,10 +429,10 @@ func_desc_dict = {
     "damageNpCounter": "Reflect Damage Received",
     "damageValue": "Deal Damage",
     "delayNpturn": "Drain Charge",
-    "eventDropUp": "Increase Drop Amount",
-    "eventPointUp": "Increase Drop Amount",
-    "eventDropRateUp": "Increase Drop Rate",
-    "eventPointRateUp": "Increase Drop Rate",
+    "eventDropUp": "Increase Event Drop Amount",
+    "eventPointUp": "Increase Event Point",
+    "eventDropRateUp": "Increase Event Drop Rate",
+    "eventPointRateUp": "Increase Event Point Rate",
     "enemyEncountCopyRateUp": "Create Clone of Enemy",
     "enemyEncountRateUp": "Improve Appearance Rate of Enemy",
     "expUp": "Increase Master Exp",

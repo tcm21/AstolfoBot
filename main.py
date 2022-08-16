@@ -10,7 +10,7 @@ from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
 from gacha_calc import roll
 
-from text_builders import get_skill_description, title_case, get_enums, get_traits
+from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, stun_type_dict
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -24,7 +24,7 @@ if not scopes:
     scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
 
-commands = ["/servant", "/find skill", "/find np", "/find skill-or-np", "/support"]
+commands = ["/servant", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
 currentCmdIdx = 0
 
 def new_presence() -> interactions.ClientPresence:
@@ -44,8 +44,8 @@ def new_presence() -> interactions.ClientPresence:
     )
 
 bot = interactions.Client(
-    token=token,
-    default_scope=[int(scope) for scope in scopes.split(",")] if scopes else None,
+    token = token,
+    default_scope = int(scopes) if scopes else None,
     presence = new_presence()
 )
 
@@ -215,7 +215,7 @@ def create_servant_pages(servant, region):
         np_descriptions.append(servant_desc)
         for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
             np_descriptions.append("\n")
-            np_description = get_skill_description(session, noblePhantasm, False, region)  
+            np_description = get_skill_description(session, noblePhantasm, False, region)
             np_url = f'https://apps.atlasacademy.io/db/JP/noble-phantasm/{noblePhantasm.get("id")}'
             np_descriptions.append(f"**Noble Phantasm {i + 1}:**")
             np_descriptions.append(f"[{noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})]({np_url})")
@@ -454,9 +454,10 @@ def get_skills(
     maxLimit = 5
     pageCount = 0
     totalCount = 0
+    embed_desc = []
     for skill in matched_skills_list:
-        skillDetails = get_skill_details(skill.get('id'), flag)
-        if (skillDetails.get('type') == "passive"):
+        skill_details = get_skill_details(skill.get('id'), flag)
+        if (skill_details.get('type') == "passive"):
             continue
         servants = skill.get('reverse').get('basic').get('servant')
         servantList = []
@@ -472,30 +473,32 @@ def get_skills(
                 totalCount += 1
                 servantList.append(servant_id)
                 if pageCount >= maxLimit:
+                    embed.description = "\n".join(embed_desc)
                     embeds.append(embed)
+                    embed_desc = []
                     embed = create_embed(
                         type, type2, flag, target, buffType1, buffType2, trait, region)
                     pageCount = 0
-                skillName = skill.get('name')
-                embed.add_field(
-                    f"{totalCount}: {servant.get('name')} ({title_case(servant.get('className'))})\n",
-                    (
-                        f"[{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})"
-                    )
-                )
+                skillName = skill_details.get('name')
+                embed_desc.append("")
+                embed_desc.append(f'**{totalCount}: [{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})**')
+                embed_desc.append(f"**Skill {skill_details.get('num')}: [{skillName}](https://apps.atlasacademy.io/db/{region}/{'skill' if flag == 'skill' else 'noble-phantasm'}/{skill.get('id')})**")
+                embed_desc.append(get_skill_description(session, skill_details, False, region))
+                
                 pageCount += 1
 
+    pages = []
     if (totalCount == 0):
-        embed.add_field("Not found.", "Try different parameters")
+        return pages
     else:
         embed.set_footer("Data via Atlas Academy")
+    embed.description = "\n".join(embed_desc)
     embeds.append(embed)
-    pages = []
     cnt = 0
     for resEmbed in embeds:
         cnt += 1
         pages.append(Page(
-            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount}" if totalCount > 0 else "", resEmbed))
+            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount} {'Skills' if flag == 'skill' else 'Noble Phantasms'}" if totalCount > 0 else "", resEmbed))
 
     return pages
 
@@ -522,15 +525,15 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     )
 
     if type:
-        embed.add_field("Type 1", title_case(type), True)
+        embed.add_field("Effect 1", func_desc_dict.get(type), True)
     if type2:
-        embed.add_field("Type 2", title_case(type2), True)
+        embed.add_field("Effect 2", func_desc_dict.get(type), True)
     if target:
-        embed.add_field("Target", title_case(target), True)
+        embed.add_field("Target", target_desc_dict.get(target), True)
     if buffType1:
-        embed.add_field("Buff 1", title_case(buffType1), True)
+        embed.add_field("Effect 1", buff_desc_dict.get(buffType1), True)
     if buffType2:
-        embed.add_field("Buff 2", title_case(buffType2), True)
+        embed.add_field("Effect 2", buff_desc_dict.get(buffType2), True)
     if trait:
         embed.add_field("Affected Trait", title_case(get_traits(session)[trait]), True)
     if region:
@@ -671,33 +674,18 @@ async def select_response(ctx: interactions.ComponentContext, value=[]):
     await send_paginator(ctx, pages)
 
 
-@bot.command()
-async def find(ctx: interactions.CommandContext):
-    pass
-
-@find.subcommand(
-    description="Search for servants with skills that matches the specified parameters",
-)
-@interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
-@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
-@interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
-@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def skill(
+async def find_logic(
     ctx: interactions.CommandContext,
     type: str = "",
     type2: str = "",
     target: str = "",
-    buff: str = "",
-    buff2: str = "",
     trait: str = "",
     region: str = "",
-):
-    if not type and not type2 and not target and not buff and not buff2 and not trait:
+    flag: str = "skill"
+) -> list:
+    if not type and not type2 and not target and not trait:
         await ctx.send(content="Invalid input.", ephemeral=True)
-        return
+        return []
 
     if not region and default_regions.get(ctx.guild_id) == None:
         region = "JP"
@@ -705,43 +693,63 @@ async def skill(
 
     region = default_regions[ctx.guild_id] if not region else region
 
+    buff = ""
+    buff2 = ""
+    if type in buff_desc_dict:
+        buff = type
+        type = ""
+    if type2 in buff_desc_dict:
+        buff2 = type2
+        type2 = ""
+
+    pages = get_skills(type, type2, flag, target, buff, buff2, trait, region)
+    return pages
+
+
+@bot.command()
+async def find(ctx: interactions.CommandContext):
+    pass
+
+
+@find.subcommand(
+    description="Search for servants with skills that matches the specified parameters",
+)
+@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
+@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
+@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def skill(
+    ctx: interactions.CommandContext,
+    effect: str = "",
+    effect2: str = "",
+    target: str = "",
+    trait: str = "",
+    region: str = "",
+):
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
+    pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
     await send_paginator(ctx, pages)
 
 
 @find.subcommand(
     description="Search for servants with NP that matches the specified parameters",
 )
-@interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
+@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
-@interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
 @interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def np(
     ctx: interactions.CommandContext,
-    type: str = "",
-    type2: str = "",
+    effect: str = "",
+    effect2: str = "",
     target: str = "",
-    buff: str = "",
-    buff2: str = "",
     trait: str = "",
     region: str = "",
 ):
-    if not type and not type2 and not target and not buff and not buff2 and not trait:
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id] if not region else region
-
     await ctx.defer()
-    pages = get_skills(type, type2, "NP", target, buff, buff2, trait, region)
+    pages = await find_logic(ctx, effect, effect2, target, trait, region, "NP")
     await send_paginator(ctx, pages)
 
 
@@ -749,36 +757,22 @@ async def np(
     description="Search for servants with NP and/or skills that matches the specified parameters",
     name="skill-or-np"
 )
-@interactions.option(str, name="type", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="type2", description="Effect 2", required=False, autocomplete=True)
+@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
 @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="buff", description="Buff 1", required=False, autocomplete=True)
-@interactions.option(str, name="buff2", description="Buff 2", required=False, autocomplete=True)
 @interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
 @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
 async def skillOrNp(
     ctx: interactions.CommandContext,
-    type: str = "",
-    type2: str = "",
+    effect: str = "",
+    effect2: str = "",
     target: str = "",
-    buff: str = "",
-    buff2: str = "",
     trait: str = "",
     region: str = "",
 ):
-    if not type and not type2 and not target and not buff and not buff2 and not trait:
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id]
-
     await ctx.defer()
-    pages = get_skills(type, type2, "skill", target, buff, buff2, trait, region)
-    pages.extend(get_skills(type, type2, "NP", target, buff, buff2, trait, region))
+    pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
+    pages.extend(await find_logic(ctx, effect, effect2, target, trait, region, "NP"))
     await send_paginator(ctx, pages)
 
 
@@ -841,6 +835,7 @@ async def support(
 
     await send_paginator(ctx, pages)
 
+
 @bot.command(
     description="Check your chances of getting a servant"
 )
@@ -889,7 +884,7 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
         pages (_type_): Result data
     """
     if pages == None or len(pages) == 0:
-        await ctx.send("No result.")
+        await ctx.send("No result.", ephemeral=True)
     if len(pages) == 1:
         await ctx.send(embeds=pages[0].embeds)
     elif len(pages) >= 2:
@@ -916,12 +911,34 @@ def populate_enum_list(enumName: str, input_value: str):
     return choices
 
 
+def populate_type_list(input_value: str):
+    enum_list = func_desc_dict | buff_desc_dict
+    options = enum_list.items()
+    filteredOptions = [
+        option for option in options
+        if (input_value.upper() in option[0].upper() or input_value.upper() in option[1].upper())
+    ]
+    choices = []
+    for option in filteredOptions[0:24]:
+        choices.append(interactions.Choice(name=option[1], value=option[0]))
+    return choices
+
+
+def populate_target_list(input_value: str):
+    options = target_desc_dict.items()
+    filteredOptions = [
+        option for option in options
+        if (input_value.upper() in option[0].upper() or input_value.upper() in option[1].upper())
+    ]
+    choices = []
+    for option in filteredOptions[0:24]:
+        choices.append(interactions.Choice(name=option[1], value=option[0]))
+    return choices
+
+
 def populate_traits(input_value: str):
     traits = get_traits(session)
-    # Traits ID which starts with 2 and has 4 digits
     filteredTraits = dict(filter(lambda elem:
-        str(elem[0])[0] == "2" and
-        len(str(elem[0])) == 4 and
         (input_value.upper() in elem[1].upper() or input_value.upper() in title_case(elem[1]).upper()),
         traits.items()
         )
@@ -974,29 +991,24 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, className: 
     await ctx.populate(populate_enum_list("SvtClass", className))
 
 
-@bot.autocomplete(command="find", name="type")
+@bot.autocomplete(command="find", name="effect")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
-    await ctx.populate(populate_enum_list("NiceFuncType", type))
+    await ctx.populate(populate_type_list(type))
 
 
-@bot.autocomplete(command="find", name="type2")
+@bot.autocomplete(command="find", name="effect2")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
-    await ctx.populate(populate_enum_list("NiceFuncType", type2))
+    await ctx.populate(populate_type_list(type2))
 
 
 @bot.autocomplete(command="find", name="target")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    await ctx.populate(populate_enum_list("NiceFuncTargetType", target))
+    await ctx.populate(populate_target_list(target))
 
 
-@bot.autocomplete(command="find", name="buff")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, buff: str = ""):
-    await ctx.populate(populate_enum_list("NiceBuffType", buff))
-
-
-@bot.autocomplete(command="find", name="buff2")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, buff2: str = ""):
-    await ctx.populate(populate_enum_list("NiceBuffType", buff2))
+@bot.autocomplete(command="find", name="trait")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
+    await ctx.populate(populate_traits(trait))
 
 
 @bot.autocomplete(command="servant", name="region")
@@ -1010,10 +1022,6 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str
     await ctx.populate(choices)
 
 
-@bot.autocomplete(command="find", name="trait")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
-    await ctx.populate(populate_traits(trait))
-
 @bot.event
 async def on_start():
     status_task.start()
@@ -1022,6 +1030,5 @@ async def on_start():
 @create_task(IntervalTrigger(600))
 async def status_task():
     await bot.change_presence(new_presence())
-
 
 bot.start()
