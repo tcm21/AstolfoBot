@@ -63,6 +63,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         sval_turns = svals_level[0].get("Turn")
         sval_count = svals_level[0].get("Count")
         sval_value = svals_level[0].get("Value")
+        sval_value2 = svals_level[0].get("Value2")
         sval_userate = svals_level[0].get("UseRate")
         sval_target = svals_level[0].get("Target")
         svals_overcharge = [svals_level[0]]
@@ -151,7 +152,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 not all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_overcharge)
                 or not all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_level)
             )
-        if sval_rate and (sval_rate != 1000 or is_multiple_rates) and sval_rate != 5000: # Skip 100% chance and 500% chance
+        if sval_rate and (abs(sval_rate) != 1000 or is_multiple_rates) and abs(sval_rate) != 5000: # Skip 100% chance and 500% chance
             chances_list = []
             if all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_level):
                 # Chance stays the same on NP level up => Overcharge or single value
@@ -176,9 +177,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 usechance_text = f'Chance: {" · ".join(usechances_list)}'
 
         if sval_count and sval_count > 0:
-            count_text = f'{sval_count} Times'
+            count_text = f'{sval_count} Time{"s" if sval_count > 1 else ""}'
         if sval_turns and sval_turns > 0:
-            turns_text = f'{sval_turns} Turns'
+            turns_text = f'{sval_turns} Turn{"s" if sval_turns > 1 else ""}'
 
         turns_count_text = ", ".join([count_text, turns_text]).strip(", ")
         if turns_count_text: turns_count_text = f"({turns_count_text})"
@@ -188,6 +189,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         inline_value_text = f" ({values_text})" if is_single_value else ""
 
         sub_skill_text = "└Sub-" if sub_skill else ""
+
+        is_negative_rate = sval_rate and sval_rate == -5000
+        previous_function_text = "If previous function succeeds, " if is_negative_rate else ""
         
         func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
         if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
@@ -231,9 +235,36 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                     target_traits.append(trait_desc)
                 if len(target_traits) > 0: function_effect += f' against [{", ".join(target_traits)}]'
 
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
+        elif func_type == "gainNpBuffIndividualSum":
+            traitvals = function.get("traitVals")
+            traitvals_text = []
+            for tval in traitvals:
+                if int(tval.get("id")) >= 5000: continue
+                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}] to [{func_target_text}]{target_vals_text} {turns_count_text}')
+        elif func_type == "moveState":
+            # Lady Avalon, Van Gogh, ...
+            depend_func_id = svals_level[0].get("DependFuncId")
+            depend_func = get_function_by_id(session, depend_func_id, region)
+            traitvals = depend_func.get("traitVals")
+            traitvals_text = []
+            for tval in traitvals:
+                if int(tval.get("id")) >= 5000: continue
+                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}] to [{func_target_text}]{target_vals_text} {turns_count_text}')
+        elif func_type == "subState":
+            # Remove effects
+            remove_text = f' ({sval_value2} effect{"s" if sval_value2 > 1 else ""})' if sval_value2 else ""
+
+            traitvals = function.get("traitVals")
+            traitvals_text = []
+            for tval in traitvals:
+                if int(tval.get("id")) >= 5000: continue
+                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}]{remove_text} from [{func_target_text}]{target_vals_text} {turns_count_text}')
         else:
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
 
         if chances_text: skill_descs.append(f'{chances_text}')
         if usechance_text: skill_descs.append(f'{usechance_text}')
@@ -259,7 +290,7 @@ def get_overcharge_values(function, buff_type, func_type, key: str = "Value", pr
 
 def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
     if not buff_type:
-        if func_type == "gainNp":
+        if func_type.startswith("gainNp"):
             return f'{remove_zeros_decimal(value / 100)}%'
         elif func_type.startswith("damageNp"):
             return f'{remove_zeros_decimal(value / 10)}%'
@@ -277,7 +308,7 @@ def get_sval_from_buff(value: int, buff_type: str, func_type: str) -> str:
 
 
 def remove_zeros_decimal(value):
-    return str(value).rstrip("0").rstrip(".") if "." in str(value) else str(value)
+    return str(abs(value)).rstrip("0").rstrip(".") if "." in str(value) else str(value)
 
 
 def title_case(string):
@@ -309,6 +340,26 @@ def get_field_desc(session: requests_cache.CachedSession, trait_id: str | int, r
         return trait_name
     url = f'https://apps.atlasacademy.io/db/{region}/quests?fieldIndividuality={id}'
     return f'[{trait_name}]({url})'
+
+
+
+def get_function_by_id(session: requests_cache.CachedSession, id: int, region: str = "JP"):
+    """Get function by ID
+
+    Args:
+        id (int): Function ID
+        region (str, optional): Region. Defaults to "JP".
+
+    Returns:
+        Function object
+    """
+    response = session.get(
+        f"https://api.atlasacademy.io/nice/{region}/function/{id}")
+    function = json.loads(response.text)
+    if function.get('detail') == "Function not found":
+        return None
+    else:
+        return function
 
 
 def get_skill_by_id(session: requests_cache.CachedSession, id: int, region: str = "JP"):
