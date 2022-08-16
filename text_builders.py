@@ -15,15 +15,33 @@ class NpFunctionType(Flag):
 def get_np_function_type(function) -> NpFunctionType:
     svals = function.get("svals")
     svals2 = function.get("svals2")
-    if (svals[0].get("Value") != svals[1].get("Value") and
-        (svals[0].get("Value") != svals2[0].get("Value") or svals[0].get("Correction") != svals2[0].get("Correction"))
-        ):
+    if (
+        (
+            svals[0].get("Value") != svals[1].get("Value") or
+            svals[0].get("Correction") != svals[1].get("Correction") or
+            svals[0].get("Rate") != svals[1].get("Rate")
+        )
+         and
+        (
+            svals[0].get("Value") != svals2[0].get("Value") or
+            svals[0].get("Correction") != svals2[0].get("Correction") or
+            svals[0].get("Rate") != svals2[0].get("Rate")
+        )
+    ):
         return NpFunctionType.BOTH
 
-    if svals[0].get("Value") != svals[1].get("Value"):
+    if (
+        svals[0].get("Value") != svals[1].get("Value") or
+        svals[0].get("Correction") != svals[1].get("Correction") or
+        svals[0].get("Rate") != svals[1].get("Rate")
+    ):
         return NpFunctionType.LEVEL
     
-    if svals[0].get("Value") != svals2[0].get("Value") or svals[0].get("Correction") != svals2[0].get("Correction"):
+    if (
+        svals[0].get("Value") != svals2[0].get("Value") or
+        svals[0].get("Correction") != svals2[0].get("Correction") or
+        svals[0].get("Rate") != svals2[0].get("Rate")
+    ):
         return NpFunctionType.OVERCHARGE
     
     return NpFunctionType.NONE
@@ -40,16 +58,25 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         func_type = function.get("funcType")
         if func_type == "none": continue
 
-        svals = function.get("svals")
-        sval_rate = svals[0].get("Rate")
-        sval_turns = svals[0].get("Turn")
-        sval_count = svals[0].get("Count")
-        sval_value = svals[0].get("Value")
-        sval_userate = svals[0].get("UseRate")
-        sval_target = svals[0].get("Target")
+        svals_level = function.get("svals")
+        sval_rate = svals_level[0].get("Rate")
+        sval_turns = svals_level[0].get("Turn")
+        sval_count = svals_level[0].get("Count")
+        sval_value = svals_level[0].get("Value")
+        sval_userate = svals_level[0].get("UseRate")
+        sval_target = svals_level[0].get("Target")
+        svals_overcharge = [svals_level[0]]
+        if is_np: svals_overcharge = [
+            function.get("svals")[0],
+            function.get("svals2")[0],
+            function.get("svals3")[0],
+            function.get("svals4")[0],
+            function.get("svals5")[0],
+        ]
 
         chances_text = ""
         values_text = ""
+        extra_values_text = ""
         turns_text = ""
         count_text = ""
         usechance_text = ""
@@ -58,7 +85,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
 
         np_function_type = NpFunctionType.NONE
         if is_np: np_function_type = get_np_function_type(function)
-
+        
         func_tvals = function.get("functvals")
         if func_tvals:
             target_traits = []
@@ -75,52 +102,76 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 func_skill = get_skill_by_id(session, sval_value)
                 func_skill_desc = get_skill_description(session=session, skill=func_skill, sub_skill=True, region=region)
                 values_text += func_skill_desc
-            elif all(sval.get("Value") == svals[0].get("Value") for sval in svals):
-                # All values are the same
+            elif all(sval.get("Value") == svals_level[0].get("Value") for sval in svals_level):
+                # All values stay the same on NP level up
                 if is_np and NpFunctionType.OVERCHARGE in np_function_type:
                     values_text = get_overcharge_values(function, buff_type, func_type)
                 else:
                     is_single_value = True
                     if buff_type == "addIndividuality": # Add trait
-                        values_text = f'{get_trait_desc(session, svals[0].get("Value"), region)}'
+                        values_text = f'{get_trait_desc(session, svals_level[0].get("Value"), region)}'
                     elif buff_type == "fieldIndividuality": # Change fields
-                        values_text = f'{get_field_desc(session, svals[0].get("Value"), region)}'
+                        values_text = f'{get_field_desc(session, svals_level[0].get("Value"), region)}'
                     else:
-                        values_text = f'{get_sval_from_buff(svals[0].get("Value"), buff_type, func_type)}'
+                        values_text = f'{get_sval_from_buff(svals_level[0].get("Value"), buff_type, func_type)}'
+                
+                if is_np:
+                    # For servants with correction (supereffective dmg) or chance increase on NP level up instead of NP damage (e.g. Euryale)
+                    if not all(sval.get("Correction") == svals_level[0].get("Correction") for sval in svals_level):
+                        for svalIdx, sval in enumerate(svals_level):
+                            valuesTextList.append(f'{get_sval_from_buff(sval.get("Correction"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
+                        np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
+                        extra_values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
+                    elif not all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_level):
+                        for svalIdx, sval in enumerate(svals_level):
+                            valuesTextList.append(f'{get_sval_from_buff(sval.get("Rate"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
+                        np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
+                        extra_values_text = f'Chance{np_text}: {" · ".join(valuesTextList)}'
             else:
-                for svalIdx, sval in enumerate(svals):
+                for svalIdx, sval in enumerate(svals_level):
                     valuesTextList.append(f'{get_sval_from_buff(sval.get("Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
                 np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
-                if is_np:
-                    if sval_target and func_type == "damageNpIndividual":
-                        supereffective_target = get_trait_desc(session, sval_target, region)
-                    if NpFunctionType.OVERCHARGE in np_function_type:
-                        values_text += "\n" + get_overcharge_values(function, buff_type, func_type, True)
+            if is_np:
+                if sval_target and func_type == "damageNpIndividual":
+                    supereffective_target = get_trait_desc(session, sval_target, region)
+                    
         else:
             if buff_type == "counterFunction":
                 # Bazett
-                counter_id = svals[0].get("CounterId")
+                counter_id = svals_level[0].get("CounterId")
                 func_skill = get_np_by_id(session, counter_id, region)
                 func_skill_desc = get_skill_description(session=session, skill=func_skill, sub_skill=True, region=region)
                 values_text += func_skill_desc
 
-        if sval_rate and sval_rate != 1000 and sval_rate != 5000:
+        is_multiple_rates = False
+        if is_np:
+            is_multiple_rates = (
+                # Changes on NP level or overcharge
+                not all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_overcharge)
+                or not all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_level)
+            )
+        if sval_rate and (sval_rate != 1000 or is_multiple_rates) and sval_rate != 5000: # Skip 100% chance and 500% chance
             chances_list = []
-            if all(sval.get("Rate") == svals[0].get("Rate") for sval in svals):
-                # All values are the same
-                chances_text = f'Chance: {remove_zeros_decimal(svals[0].get("Rate") / 10)}%'
+            if all(sval.get("Rate") == svals_level[0].get("Rate") for sval in svals_level):
+                # Chance stays the same on NP level up => Overcharge or single value
+                if NpFunctionType.OVERCHARGE in np_function_type:
+                    chances_text = get_overcharge_values(function, buff_type, func_type, "Rate", "Chance")
+                else:
+                    chances_text = f'Chance: {remove_zeros_decimal(svals_level[0].get("Rate") / 10)}%'
             else:
-                for svalIdx, sval in enumerate(svals):
+                # Chance changes on NP level up (e.g. Stheno)
+                for svalIdx, sval in enumerate(svals_level):
                     chances_list.append(f'{remove_zeros_decimal(sval.get("Rate") / 10)}{str(svalIdx + 1).translate(SUB)}%')
-                chances_text = f'Chance: {" · ".join(chances_list)}'
+                np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
+                chances_text = f'Chance{np_text}: {" · ".join(chances_list)}'
 
         if sval_userate and sval_userate != 1000 and sval_userate != 5000:
             usechances_list = []
-            if all(sval.get("UseRate") == svals[0].get("UseRate") for sval in svals):
-                usechance_text = f'Chance: {remove_zeros_decimal(svals[0].get("UseRate") / 10)}%'
+            if all(sval.get("UseRate") == svals_level[0].get("UseRate") for sval in svals_level):
+                usechance_text = f'Chance: {remove_zeros_decimal(svals_level[0].get("UseRate") / 10)}%'
             else:
-                for svalIdx, sval in enumerate(svals):
+                for svalIdx, sval in enumerate(svals_level):
                     usechances_list.append(f'{remove_zeros_decimal(sval.get("UseRate") / 10)}%{str(svalIdx + 1).translate(SUB)}%')
                 usechance_text = f'Chance: {" · ".join(usechances_list)}'
 
@@ -141,11 +192,17 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
         if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
         if func_type == "damageNpIndividual":
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect} to [{func_target_text}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]')
         elif func_type.startswith("addState"):
-            buff_text = buff_desc_dict.get(buff_type)
+            if buff_type == "donotAct":
+                for val in function.get("buffs")[0].get("vals"):
+                    buff_text = stun_type_dict.get(str(val.get("id")))
+                    if buff_text: break
+            else:
+                buff_text = buff_desc_dict.get(buff_type)
+
             if not buff_text: buff_text = title_case(buff_type)
             function_effect = f'Grants [{buff_text}]'
 
@@ -181,11 +238,12 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         if chances_text: skill_descs.append(f'{chances_text}')
         if usechance_text: skill_descs.append(f'{usechance_text}')
         if values_text and not is_single_value: skill_descs.append(f'{values_text}')
+        if extra_values_text: skill_descs.append(f'{extra_values_text}')
         funcIdx += 1
     return "\n".join(skill_descs)
 
 
-def get_overcharge_values(function, buff_type, func_type, is_correction: bool = False):
+def get_overcharge_values(function, buff_type, func_type, key: str = "Value", prepend_text: str = "Value"):
     valuesTextList = []
     for svalIdx, sval in enumerate([
         function.get("svals")[0],
@@ -194,8 +252,8 @@ def get_overcharge_values(function, buff_type, func_type, is_correction: bool = 
         function.get("svals4")[0],
         function.get("svals5")[0],
     ]):
-        valuesTextList.append(f'{get_sval_from_buff(sval.get("Correction" if is_correction else "Value"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
-    values_text = f'Value (Overcharge): {" - ".join(valuesTextList)}'
+        valuesTextList.append(f'{get_sval_from_buff(sval.get(key), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
+    values_text = f'{prepend_text} (Overcharge): {" - ".join(valuesTextList)}'
     return values_text
 
 
@@ -489,4 +547,16 @@ target_desc_dict = {
     "commandTypeSelfTreasureDevice": "target noble phantasm version",
     "fieldOther": "party and enemies except self",
     "enemyOneNoTargetNoAction": "entity that last dealt damage to self",
+}
+
+stun_type_dict = {
+    "3011": "Poison",
+    "3012": "Charm",
+    "3013": "Petrify",
+    "3014": "Stun",
+    "3015": "Burn",
+    "3026": "Curse",
+    "3045": "Bound",
+    "3047": "Pigify",
+    "3066": "Sleep",
 }
