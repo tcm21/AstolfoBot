@@ -549,7 +549,7 @@ buff_desc_dict = {
     "fixCommandcard": "Freeze Command Cards",
     "guts": "Guts",
     "gutsFunction": "Trigger Skill on Guts",
-    "gutsRatio": "Guts",
+    "gutsRatio": "Guts (Ratio)",
     "invincible": "Invincible",
     "multiattack": "Multiple Hits",
     "pierceInvincible": "Ignore Invincible",

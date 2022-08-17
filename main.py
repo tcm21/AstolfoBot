@@ -276,7 +276,7 @@ def create_servant_pages(servant, region):
     return pages
 
 
-def get_functions(type: str, target: str = "", region: str = "JP"):
+def get_functions(type: str = "", target: str = "", trait: str = "", region: str = "JP"):
     """Gets all the effects (functions) with the specified effect.
 
     Args:
@@ -287,43 +287,28 @@ def get_functions(type: str, target: str = "", region: str = "JP"):
     Returns:
         A list of functions with the specified effect.
     """
-    if not type:
+    if not type and not target and not trait:
         return []
-    targetQueryStr = ""
+    type_query = ""
+    if type:
+        type_query = f"&type={type}"
+    target_query = ""
     if target:
-        targetQueryStr = f"&targetType={target}"
-    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&type={type}{targetQueryStr}"
+        target_query = f"&targetType={target}"
+    trait_query = ""
+    if trait:
+        trait_query = f"&tvals={trait}"
+    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant{type_query}{target_query}{trait_query}"
     response = session.get(url)
     functions = json.loads(response.text)
     return functions
 
 
-def get_functions_by_trait(trait: str, target: str = "", region: str = "JP"):
-    """Gets all the effects (functions) with the specified trait effect.
-
-    Args:
-        trait (str): Trait ID
-        target (str): Effect target
-        region (str): Region (Default: JP)
-
-    Returns:
-        A list of functions with the specified effect.
-    """
-    if not trait:
-        return []
-    targetQueryStr = ""
-    if target:
-        targetQueryStr = f"&targetType={target}"
-
-    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant&tvals={trait}{targetQueryStr}"
-    response = session.get(url)
-    functions = json.loads(response.text)
-    return functions
-
-
-def get_skills_from_functions(functions, flag: str = "skill"):
+def get_skills_from_functions(functions, flag: str = "skill", target: str = ""):
     found_skills = []
     for function in functions:
+        if target and function.get("funcTargetType") != target:
+            continue
         for skill in function.get('reverse').get('basic').get(flag):
             if not skill.get('name') or skill.get('type') == "passive":
                 continue
@@ -355,8 +340,8 @@ def get_skills_with_type(type: str, flag: str = "skill", target: str = "", regio
     """
     if not type:
         return None
-    functions = get_functions(type, target, region)
-    found_skills = get_skills_from_functions(functions, flag)
+    functions = get_functions(type=type, target=target, region=region)
+    found_skills = get_skills_from_functions(functions, flag, target)
     return found_skills
 
 
@@ -375,12 +360,18 @@ def get_skills_with_trait(trait: str, flag: str = "skill", target: str = "", reg
     if not trait:
         return None
 
+    # Search by buffs
+    skills_by_buff = get_skills_with_buff(flag=flag, target=target, trait=trait, region=region)
+
+    # Search by functions
     if flag == "skill":
-        functions = get_functions_by_trait(trait, target, region)
-        found_skills = get_skills_from_functions(functions, flag)
+        functions = get_functions(target=target, trait=trait, region=region)
+        found_skills = get_skills_from_functions(functions, flag, target)
+        found_skills.extend(skills_by_buff)
         return found_skills
     elif flag == "NP":
         found_nps = get_nps_with_trait(trait, region)
+        found_nps.extend(skills_by_buff)
         return found_nps
     return None
 
@@ -392,16 +383,22 @@ def get_nps_with_trait(trait: str, region: str = "JP"):
     return nps
 
 
-def get_skills_with_buff(buffType: str = "", flag: str = "skill", region: str = "JP"):
-    if not buffType:
+def get_skills_with_buff(buff_type: str = "", flag: str = "skill", target: str = "", trait: str = "", region: str = "JP"):
+    if not buff_type and not trait:
         return None
-    url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&type={buffType}"
+    buff_query = ""
+    if buff_type:
+        buff_query = f"&type={buff_type}"
+    trait_query = ""
+    if trait:
+        trait_query = f"&tvals={trait}"
+    url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&{buff_query}{trait_query}"
     response = session.get(url)
     buffs = json.loads(response.text)
     skills = []
     for buff in buffs:
         functions = buff.get("reverse").get("basic").get("function")
-        skills.extend(get_skills_from_functions(functions, flag))
+        skills.extend(get_skills_from_functions(functions, flag, target))
 
     return skills
 
@@ -439,11 +436,14 @@ def get_skills(
     Returns:
         Pages of embeds containing the skills data.
     """
-    found_list_1 = get_skills_with_type(type, flag, target, region)
-    found_list_2 = get_skills_with_type(type2, flag, target, region)
-    found_buff_list1 = get_skills_with_buff(buffType1, flag, region)
-    found_buff_list2 = get_skills_with_buff(buffType2, flag, region)
+    found_list_1 = get_skills_with_type(type, flag, target, region) if type else None
+    found_list_2 = get_skills_with_type(type2, flag, target, region) if type2 else None
+    
+    found_buff_list1 = get_skills_with_buff(buffType1, flag, target, "", region)
+    found_buff_list2 = get_skills_with_buff(buffType2, flag, target, "", region)
+
     found_trait_list = get_skills_with_trait(trait, flag, target, region)
+
     matched_skills_list = common_elements(
         found_list_1, found_list_2, found_buff_list1, found_buff_list2, found_trait_list
     )
