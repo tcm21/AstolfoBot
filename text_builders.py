@@ -200,6 +200,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         elif func_type.startswith("damageNp"):
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]')
         elif func_type.startswith("addState"):
+            buff_text = ""
             if buff_type == "donotAct":
                 for val in function.get("buffs")[0].get("vals"):
                     buff_text = stun_type_dict.get(str(val.get("id")))

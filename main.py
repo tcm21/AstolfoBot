@@ -118,6 +118,12 @@ def get_skill_by_id(id: int, region: str = "JP"):
         return None
     else:
         return skill
+    
+
+def get_triggering_skills(id: int, flag: str = "skill", region: str = "JP"):
+    response = session.get(
+        f"https://api.atlasacademy.io/basic/{region}/{flag}/search?reverse=true&reverseData=basic&svalsContain={id}")
+    return json.loads(response.text)
 
 
 def create_servant_pages(servant, region):
@@ -304,25 +310,39 @@ def get_functions(type: str = "", target: str = "", trait: str = "", region: str
     return functions
 
 
-def get_skills_from_functions(functions, flag: str = "skill", target: str = ""):
+def get_skills_from_functions(functions, flag: str = "skill", target: str = "", region: str = "JP", flag2: str = ""):
+    if not flag2: flag2 = flag # For searching skills triggered by NP
     found_skills = []
     for function in functions:
         if target and function.get("funcTargetType") != target:
             continue
         for skill in function.get('reverse').get('basic').get(flag):
-            if not skill.get('name') or skill.get('type') == "passive":
+            curr_skills = [skill] if flag == flag2 else []
+            if skill.get('type') == "passive":
                 continue
-            servants = skill.get('reverse').get('basic').get('servant')
-            servant_found = False
-            for servant in servants:
-                if (not servant.get('name') or
-                            servant.get('type') == "servantEquip" or
-                            servant.get('type') == "enemy"
-                        ):
+            if not skill.get("ruby"):
+                # Probably a skill triggered by another skill, try to find that skill
+                triggering_skills = get_triggering_skills(skill.get("id"), flag2, region)
+                if len(triggering_skills) > 0:
+                    if flag == flag2:
+                        curr_skills.extend(triggering_skills)
+                    else:
+                        curr_skills = triggering_skills
+                else:
                     continue
-                servant_found = True
-            if servant_found:
-                found_skills.append(skill)
+
+            for curr_skill in curr_skills:
+                servants = curr_skill.get('reverse').get('basic').get('servant')
+                servant_found = False
+                for servant in servants:
+                    if (not servant.get('name') or
+                                servant.get('type') == "servantEquip" or
+                                servant.get('type') == "enemy"
+                            ):
+                        continue
+                    servant_found = True
+                if servant_found:
+                    found_skills.append(curr_skill)
     return found_skills
 
 
@@ -341,7 +361,10 @@ def get_skills_with_type(type: str, flag: str = "skill", target: str = "", regio
     if not type:
         return None
     functions = get_functions(type=type, target=target, region=region)
-    found_skills = get_skills_from_functions(functions, flag, target)
+    found_skills = get_skills_from_functions(functions, flag, target, region)
+    if flag == "NP":
+        # One extra step for finding skills nested inside NPs (e.g. Miyu)
+        found_skills.extend(get_skills_from_functions(functions, "skill", target, region, "NP"))
     return found_skills
 
 
@@ -363,17 +386,20 @@ def get_skills_with_trait(trait: str, flag: str = "skill", target: str = "", reg
     # Search by buffs
     skills_by_buff = get_skills_with_buff(flag=flag, target=target, trait=trait, region=region)
 
+    result = None
+
     # Search by functions
     if flag == "skill":
         functions = get_functions(target=target, trait=trait, region=region)
-        found_skills = get_skills_from_functions(functions, flag, target)
+        found_skills = get_skills_from_functions(functions, flag, target, region)
         found_skills.extend(skills_by_buff)
-        return found_skills
+        result = found_skills
     elif flag == "NP":
         found_nps = get_nps_with_trait(trait, region)
         found_nps.extend(skills_by_buff)
-        return found_nps
-    return None
+        result = found_nps
+
+    return result
 
 
 def get_nps_with_trait(trait: str, region: str = "JP"):
@@ -398,7 +424,11 @@ def get_skills_with_buff(buff_type: str = "", flag: str = "skill", target: str =
     skills = []
     for buff in buffs:
         functions = buff.get("reverse").get("basic").get("function")
-        skills.extend(get_skills_from_functions(functions, flag, target))
+        if flag == "skill":
+            skills.extend(get_skills_from_functions(functions, "skill", target, region))
+        elif flag == "NP":
+            skills.extend(get_skills_from_functions(functions, "NP", target, region))
+            skills.extend(get_skills_from_functions(functions, "skill", target, region, "NP"))
 
     return skills
 
@@ -527,7 +557,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     if type:
         embed.add_field("Effect 1", func_desc_dict.get(type), True)
     if type2:
-        embed.add_field("Effect 2", func_desc_dict.get(type), True)
+        embed.add_field("Effect 2", func_desc_dict.get(type2), True)
     if target:
         embed.add_field("Target", target_desc_dict.get(target), True)
     if buffType1:
