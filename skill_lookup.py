@@ -2,8 +2,6 @@ import requests_cache
 import json
 from itertools import groupby
 
-from text_builders import get_skill_by_id, get_servant_by_id
-
 session = None
 
 def init_session(_session: requests_cache.CachedSession = None):
@@ -199,14 +197,13 @@ def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = 
     np_charge_skills_self = get_skills_from_functions(functions=np_charge_functions_self, flag="skill", region=region)
     np_charge_skills_exceptself = get_skills_from_functions(functions=np_charge_functions_exceptself, flag="skill", region=region)
 
-
     servants_self = []
     servants_exceptself = []
     for skill_self in np_charge_skills_self:
         servants_self.extend(skill_self.get('reverse').get('basic').get('servant'))
     for skill_exceptself in np_charge_skills_exceptself:
         servants_exceptself.extend(skill_exceptself.get('reverse').get('basic').get('servant'))
-    
+
     servants_self = [servant for servant in servants_self if servant.get("collectionNo") != 0]
     servants_exceptself = [servant for servant in servants_exceptself if servant.get("collectionNo") != 0]
 
@@ -221,8 +218,10 @@ def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = 
     servants_self_st = []
     servants_self_other = []
 
+    all_servants = get_all_servants(region)
+
     for servant in servants_self:
-        servant_details = get_servant_by_id(session, servant.get("id"), region, False)
+        servant_details = next(svt for svt in all_servants if svt.get("id") == servant.get("id"))
         total_sval = get_total_sval(servant_details, True)
         if total_sval < sval_value:
             continue
@@ -244,7 +243,7 @@ def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = 
     servants_exceptself_other = []
     
     for servant in servants_exceptself:
-        servant_details = get_servant_by_id(session, servant.get("id"), region, False)
+        servant_details = next(svt for svt in all_servants if svt.get("id") == servant.get("id"))
         total_sval = get_total_sval(servant_details, False)
         if total_sval < sval_value:
             continue
@@ -303,3 +302,13 @@ def get_total_sval(servant, is_self: bool):
 
 def remove_duplicates(list):
     return [i for n, i in enumerate(list) if i not in list[n + 1:]]
+
+
+def get_all_servants(region: str = "JP"):
+    if region == "JP":
+        url = "https://api.atlasacademy.io/export/JP/nice_servant_lang_en.json"
+    else:
+        url = "https://api.atlasacademy.io/export/NA/nice_servant.json"
+    response = session.get(url)
+    servants = json.loads(response.text)
+    return servants
