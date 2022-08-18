@@ -79,7 +79,7 @@ def get_skills_with_buff(buff_type: str = "", flag: str = "skill", target: str =
     trait_query = ""
     if trait:
         trait_query = f"&tvals={trait}"
-    url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&{buff_query}{trait_query}"
+    url = f"https://api.atlasacademy.io/basic/{region}/buff/search?reverse=true&reverseDepth=servant&reverseData=basic&lang=en&{buff_query}{trait_query}"
     response = session.get(url)
     buffs = json.loads(response.text)
     skills = []
@@ -120,13 +120,13 @@ def get_functions(type: str = "", target: str = "", trait: str = "", region: str
     if trait:
         trait_query = f"&tvals={trait}"
         trait_query2 = f"&vals={trait}"
-    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant{type_query}{target_query}{trait_query}"
+    url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&lang=en&reverseDepth=servant{type_query}{target_query}{trait_query}"
     response = session.get(url)
     functions = json.loads(response.text)
 
     if trait:
         # tvals and vals are both traits
-        url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&reverseDepth=servant{type_query}{target_query}{trait_query2}"
+        url = f"https://api.atlasacademy.io/basic/{region}/function/search?reverse=true&lang=en&reverseDepth=servant{type_query}{target_query}{trait_query2}"
         response = session.get(url)
         functions.extend(json.loads(response.text))
 
@@ -172,7 +172,7 @@ def get_skills_from_functions(functions, flag: str = "skill", target: str = "", 
 
 
 def get_nps_with_trait(trait: str, region: str = "JP"):
-    url = f"https://api.atlasacademy.io/basic/{region}/NP/search?svalsContain={trait}&reverse=true"
+    url = f"https://api.atlasacademy.io/basic/{region}/NP/search?svalsContain={trait}&reverse=true&lang=en"
     response = session.get(url)
     nps = json.loads(response.text)
     return nps
@@ -180,7 +180,7 @@ def get_nps_with_trait(trait: str, region: str = "JP"):
 
 def get_triggering_skills(id: int, flag: str = "skill", region: str = "JP"):
     response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/{flag}/search?reverse=true&reverseData=basic&svalsContain={id}")
+        f"https://api.atlasacademy.io/basic/{region}/{flag}/search?reverse=true&reverseData=basic&svalsContain={id}&lang=en")
     return json.loads(response.text)
 
 

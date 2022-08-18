@@ -359,7 +359,7 @@ def get_function_by_id(session: requests_cache.CachedSession, id: int, region: s
         Function object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/function/{id}")
+        f"https://api.atlasacademy.io/nice/{region}/function/{id}?lang=en")
     function = json.loads(response.text)
     if function.get('detail') == "Function not found":
         return None
@@ -378,7 +378,7 @@ def get_skill_by_id(session: requests_cache.CachedSession, id: int, region: str 
         Skill object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/skill/{id}")
+        f"https://api.atlasacademy.io/nice/{region}/skill/{id}?lang=en")
     skill = json.loads(response.text)
     if skill.get('detail') == "Skill not found":
         return None
@@ -397,7 +397,7 @@ def get_np_by_id(session: requests_cache.CachedSession, id: int, region: str = "
         Skill object
     """
     response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/NP/{id}")
+        f"https://api.atlasacademy.io/nice/{region}/NP/{id}?lang=en")
     skill = json.loads(response.text)
     if skill.get('detail') == "NP not found":
         return None
@@ -416,7 +416,7 @@ def get_servant_by_id(session, id: int, region: str = "JP", lore: bool = True):
         Servant object
     """
     response = session.get(
-        f'https://api.atlasacademy.io/nice/{region}/svt/{id}?lore={"true" if lore else "false"}')
+        f'https://api.atlasacademy.io/nice/{region}/svt/{id}?lore={"true" if lore else "false"}&lang=en')
     servant = json.loads(response.text)
     if servant.get('detail') == "Svt not found":
         return None

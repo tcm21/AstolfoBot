@@ -77,7 +77,7 @@ def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     if class_name:
         clsNameQuery= f"&className={class_name}"
     response = session.get(
-        f"https://api.atlasacademy.io/basic/{region}/svt/search?{nameQuery}{cvQuery}{clsNameQuery}&type=normal&type=heroine")
+        f"https://api.atlasacademy.io/basic/{region}/svt/search?{nameQuery}{cvQuery}{clsNameQuery}&type=normal&type=heroine&lang=en")
     servants = json.loads(response.text)
     if not isinstance(servants, list):
         servants = []
@@ -243,7 +243,7 @@ def create_servant_pages(servant, region):
 def get_skill_details(id: str = "", flag: str = "skill", region: str = "JP"):
     if not id:
         return None
-    url = f"https://api.atlasacademy.io/nice/{region}/{flag}/{id}"
+    url = f"https://api.atlasacademy.io/nice/{region}/{flag}/{id}?lang=en"
     response = session.get(url)
     return json.loads(response.text)
 
