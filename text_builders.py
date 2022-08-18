@@ -66,6 +66,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         sval_value2 = svals_level[0].get("Value2")
         sval_userate = svals_level[0].get("UseRate")
         sval_target = svals_level[0].get("Target")
+        sval_starhigher = svals_level[0].get("StarHigher")
         svals_overcharge = [svals_level[0]]
         if is_np: svals_overcharge = [
             function.get("svals")[0],
@@ -192,13 +193,16 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
 
         is_negative_rate = sval_rate and sval_rate == -5000
         previous_function_text = "If previous function succeeds, " if is_negative_rate else ""
+
+        if sval_starhigher and sval_starhigher > 0:
+            previous_function_text = f"[{sval_starhigher}+ Stars] " + previous_function_text
         
         func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
         if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
         if func_type == "damageNpIndividual":
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
-            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {function_effect}{inline_value_text} to [{func_target_text}]')
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}]')
         elif func_type.startswith("addState"):
             buff_text = ""
             if buff_type == "donotAct":
