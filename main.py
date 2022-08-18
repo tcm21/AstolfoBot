@@ -10,7 +10,7 @@ from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
 from gacha_calc import roll
 
-from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, stun_type_dict
+from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id
 import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait
 
@@ -82,25 +82,6 @@ def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     if not isinstance(servants, list):
         servants = []
     return servants
-
-
-def get_servant_by_id(id: int, region: str = "JP"):
-    """Get servant by ID
-
-    Args:
-        id (int): Servant ID
-        region (str, optional): Region. Defaults to "JP".
-
-    Returns:
-        Servant object
-    """
-    response = session.get(
-        f"https://api.atlasacademy.io/nice/{region}/svt/{id}?lore=true")
-    servant = json.loads(response.text)
-    if servant.get('detail') == "Svt not found":
-        return None
-    else:
-        return servant
 
 
 def create_servant_pages(servant, region):
@@ -472,7 +453,7 @@ async def servant(
         await ctx.send("Not found.")
         return
     if len(servants) == 1:
-        servant = get_servant_by_id(servants[0].get("id"), region)
+        servant = get_servant_by_id(session, servants[0].get("id"), region)
         pages = create_servant_pages(servant, region)
         await send_paginator(ctx, pages)
     else:
@@ -525,7 +506,7 @@ async def select_response(ctx: interactions.ComponentContext, value=[]):
     region = value[0].split(":")[1]
 
     await ctx.defer()
-    servant = get_servant_by_id(id, region)
+    servant = get_servant_by_id(session, id, region)
     pages = create_servant_pages(servant, region)
     await ctx.message.delete()
     await send_paginator(ctx, pages)

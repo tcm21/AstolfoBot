@@ -401,6 +401,25 @@ def get_np_by_id(session: requests_cache.CachedSession, id: int, region: str = "
         return skill
 
 
+def get_servant_by_id(session, id: int, region: str = "JP", lore: bool = True):
+    """Get servant by ID
+
+    Args:
+        id (int): Servant ID
+        region (str, optional): Region. Defaults to "JP".
+
+    Returns:
+        Servant object
+    """
+    response = session.get(
+        f'https://api.atlasacademy.io/nice/{region}/svt/{id}?lore={"true" if lore else "false"}')
+    servant = json.loads(response.text)
+    if servant.get('detail') == "Svt not found":
+        return None
+    else:
+        return servant
+
+
 def get_enums(session: requests_cache.CachedSession, enum_type: str):
     response = session.get(
         f"https://api.atlasacademy.io/export/JP/nice_enums.json")  # JP and NA use the same enums

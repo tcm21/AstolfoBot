@@ -1,11 +1,16 @@
 import requests_cache
 import json
+from itertools import groupby
+
+from text_builders import get_skill_by_id, get_servant_by_id
 
 session = None
 
-def init_session(_session: requests_cache.CachedSession):
+def init_session(_session: requests_cache.CachedSession = None):
     global session
-    if not session:
+    if not _session:
+        session = requests_cache.CachedSession(expire_after=360)
+    elif not session:
         session = _session
 
 
@@ -156,7 +161,8 @@ def get_skills_from_functions(functions, flag: str = "skill", target: str = "", 
                 for servant in servants:
                     if (not servant.get('name') or
                                 servant.get('type') == "servantEquip" or
-                                servant.get('type') == "enemy"
+                                servant.get('type') == "enemy" or
+                                servant.get("collectionNo") == 0
                             ):
                         continue
                     servant_found = True
@@ -176,3 +182,97 @@ def get_triggering_skills(id: int, flag: str = "skill", region: str = "JP"):
     response = session.get(
         f"https://api.atlasacademy.io/basic/{region}/{flag}/search?reverse=true&reverseData=basic&svalsContain={id}")
     return json.loads(response.text)
+
+
+def get_np_chargers(sval_value: int = 5000, region: str = "JP"):
+    np_charge_functions = get_functions(type="gainNp", region=region)
+    np_charge_functions_self = []
+    np_charge_functions_exceptself = []
+    for function in np_charge_functions:
+        if function.get("funcTargetType") == "self":
+            np_charge_functions_self.append(function)
+        elif "enemy" in function.get("funcTargetType"):
+            continue
+        else:
+            np_charge_functions_exceptself.append(function)
+
+    np_charge_skills_self = get_skills_from_functions(functions=np_charge_functions_self, flag="skill", region=region)
+    np_charge_skills_exceptself = get_skills_from_functions(functions=np_charge_functions_exceptself, flag="skill", region=region)
+
+
+    servants_self = []
+    servants_exceptself = []
+    for skill_self in np_charge_skills_self:
+        servants_self.extend(skill_self.get('reverse').get('basic').get('servant'))
+    for skill_exceptself in np_charge_skills_exceptself:
+        servants_exceptself.extend(skill_exceptself.get('reverse').get('basic').get('servant'))
+    
+    servants_self = [servant for servant in servants_self if servant.get("collectionNo") != 0]
+    servants_exceptself = [servant for servant in servants_exceptself if servant.get("collectionNo") != 0]
+
+    servants_self = remove_duplicates(servants_self)
+    servants_exceptself = remove_duplicates(servants_exceptself)
+
+    servants_self_aoe = []
+    servants_self_st = []
+    servants_self_other = []
+
+    for servant in servants_self:
+        servant_details = get_servant_by_id(session, servant.get("id"), region, False)
+        total_sval = get_total_sval(servant_details, True)
+        if total_sval < sval_value:
+            continue
+
+        nps = servant_details.get("noblePhantasms")
+        if not nps or len(nps) == 0:
+            continue
+
+        effectFlags = nps[0].get("effectFlags")
+        if "attackEnemyAll" in effectFlags:
+            servants_self_aoe.append({ "totalSvals": total_sval, "details": servant_details })
+        elif "attackEnemyOne" in effectFlags:
+            servants_self_st.append({ "totalSvals": total_sval, "details": servant_details })
+        else:
+            servants_self_other.append({ "totalSvals": total_sval, "details": servant_details })
+
+    servants_exceptself_sval = []
+    
+    for servant in servants_exceptself:
+        servant_details = get_servant_by_id(session, servant.get("id"), region, False)
+        total_sval = get_total_sval(servant_details, False)
+        if total_sval < sval_value:
+            continue
+        servants_exceptself_sval.append({ "totalSvals": total_sval, "details": servant_details })
+
+    pass
+
+
+def get_total_sval(servant, is_self: bool):
+    total_sval = 0
+    if not servant:
+        return total_sval
+
+    servant_skills = servant.get("skills")
+
+    def key_func(s):
+        return s["num"]
+
+    servant_skills = sorted(servant_skills, key=key_func)
+    for key, servant_skill_group in groupby(servant_skills, key=key_func):
+        grouped_skills = list(servant_skill_group)
+        servant_skill = grouped_skills[-1]
+
+        for function in servant_skill.get("functions"):
+            if function.get("funcType") != "gainNp":
+                continue
+            if "enemy" in function.get("funcTargetType"):
+                continue
+            if is_self and function.get("funcTargetType") == "self":
+                total_sval += function.get("svals")[-1].get("Value")
+            if not is_self and not function.get("funcTargetType") == "self":
+                total_sval += function.get("svals")[-1].get("Value")
+    return total_sval
+
+
+def remove_duplicates(list):
+    return [i for n, i in enumerate(list) if i not in list[n + 1:]]

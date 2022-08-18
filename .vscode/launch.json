@@ -8,10 +8,17 @@
             "name": "Python: Main",
             "type": "python",
             "request": "launch",
-            // "program": "${file}",
             "program": "main.py",
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Current file",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }
