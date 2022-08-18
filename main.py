@@ -10,9 +10,9 @@ from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
 from gacha_calc import roll
 
-from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id
+from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id, remove_zeros_decimal
 import skill_lookup
-from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait
+from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -26,7 +26,7 @@ if not scopes:
     scopes = parser.get('Auth', 'SCOPES', fallback=None)
 
 
-commands = ["/servant", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
+commands = ["/servant", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
 currentCmdIdx = 0
 
 def new_presence() -> interactions.ClientPresence:
@@ -53,7 +53,7 @@ bot = interactions.Client(
 
 setup(bot)
 
-session = requests_cache.CachedSession(expire_after=360)
+session = requests_cache.CachedSession(expire_after=600)
 
 def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     """Gets the servant info based on the search query.
@@ -714,6 +714,111 @@ async def gacha(
     await ctx.send(embeds=embed)
 
 
+@bot.command(
+    name="np-chargers",
+    description="Get all servants with NP chargers"
+)
+@interactions.option(str, name="amount", description="NP charge amount (In percent)", required=True)
+@interactions.option(str, name="target", description="NP charge target", required=True, autocomplete=True)
+@interactions.option(str, name="np-type", description="Servant NP type", required=False, autocomplete=True)
+@interactions.option(str, name="class-name", description="Servant class", required=False, autocomplete=True)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def np_chargers(
+    ctx: interactions.CommandContext,
+    amount: str,
+    target: str,
+    np_type: str = "",
+    class_name: str = "",
+    region: str = "",
+):
+    if not amount.isnumeric() or not target:
+        await ctx.send(content="Invalid input.", ephemeral=True)
+        return
+
+    if not region and default_regions.get(ctx.guild_id) == None:
+        region = "JP"
+        default_regions[ctx.guild_id] = region
+
+    region = default_regions[ctx.guild_id] if not region else region
+
+    skill_lookup.init_session(session)
+
+    await ctx.defer()
+    np_chargers = get_np_chargers(int(amount) * 100, class_name, region)
+    servants_list = []
+    match target:
+        case "Self":
+            match np_type:
+                case "aoe":
+                    servants_list = np_chargers.get("selfAoe")
+                case "st":
+                    servants_list = np_chargers.get("selfSt")
+                case "other":
+                    servants_list = np_chargers.get("selfOther")
+                case _:
+                    servants_list.extend(np_chargers.get("selfAoe"))
+                    servants_list.extend(np_chargers.get("selfSt"))
+                    servants_list.extend(np_chargers.get("selfOther"))
+        case "Ally":
+            match np_type:
+                case "aoe":
+                    servants_list = np_chargers.get("allyAoe")
+                case "st":
+                    servants_list = np_chargers.get("allySt")
+                case "other":
+                    servants_list = np_chargers.get("allyOther")
+                case _:
+                    servants_list.extend(np_chargers.get("allyAoe"))
+                    servants_list.extend(np_chargers.get("allySt"))
+                    servants_list.extend(np_chargers.get("allyOther"))
+                    
+    if len(servants_list) == 0:
+        await ctx.send("Not found.", ephemeral=True)
+        return
+
+    maxLimit = 20
+    totalCount = 0
+    pages = []
+    embeds = []
+    embed = None
+
+    def key_func(s):
+        return s["totalSvals"]
+
+    servants_list.sort(key=key_func, reverse=True)
+    for index, result in enumerate(servants_list):
+        if index % maxLimit == 0:
+            if embed: embeds.append(embed)
+            embed = interactions.Embed(
+                    title=f"NP Chargers List",
+                    color=0xf2aba6
+                )
+            embed.set_thumbnail("https://static.atlasacademy.io/JP/SkillIcons/skill_00601.png")
+            embed.add_field("Charge Amount", f'At least {amount}%', True)
+            embed.add_field("Target", target, True)
+            if np_type: embed.add_field("NP Type", get_np_type(np_type), True)
+            if class_name: embed.add_field("Class", title_case(class_name), True)
+            embed.add_field("Region", region, True)
+    
+        servant = result.get("details")
+        value = result.get("totalSvals")
+        servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})'
+        if embed.description:
+            embed.description += f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
+        else:
+            embed.description = f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
+        totalCount += 1
+
+    embeds.append(embed)
+    cnt = 0
+    for embed in embeds:
+        cnt += 1
+        pages.append(Page(
+            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount} " if totalCount > 0 else "", embed))
+
+    await send_paginator(ctx, pages)
+
+
 async def send_paginator(ctx: interactions.CommandContext, pages):
     """ Creates a paginator for the pages
 
@@ -732,6 +837,18 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
             ctx=ctx,
             pages=pages,
         ).run()
+
+
+def get_np_type(np_type: str):
+    match np_type:
+        case "aoe":
+            return "AoE"
+        case "st":
+            return "Single-Target"
+        case "other":
+            return "Other"
+        case _:
+            return "Unknown"
 
 
 # Autocomplete functions
@@ -825,6 +942,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = "
 
 
 @bot.autocomplete(command="servant", name="class-name")
+@bot.autocomplete(command="np-chargers", name="class-name")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, className: str = ""):
     await ctx.populate(populate_enum_list("SvtClass", className))
 
@@ -853,10 +971,28 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str 
 @bot.autocomplete(command="search", name="region")
 @bot.autocomplete(command="region", name="region")
 @bot.autocomplete(command="support", name="region")
+@bot.autocomplete(command="np-chargers", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
     choices = []
     choices.append(interactions.Choice(name="NA", value="NA"))
     choices.append(interactions.Choice(name="JP", value="JP"))
+    await ctx.populate(choices)
+
+
+@bot.autocomplete(command="np-chargers", name="target")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
+    choices = []
+    choices.append(interactions.Choice(name="Self", value="Self"))
+    choices.append(interactions.Choice(name="Ally", value="Ally"))
+    await ctx.populate(choices)
+
+
+@bot.autocomplete(command="np-chargers", name="np-type")
+async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
+    choices = []
+    choices.append(interactions.Choice(name=get_np_type("aoe"), value="aoe"))
+    choices.append(interactions.Choice(name=get_np_type("st"), value="st"))
+    choices.append(interactions.Choice(name=get_np_type("other"), value="other"))
     await ctx.populate(choices)
 
 

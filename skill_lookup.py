@@ -9,7 +9,7 @@ session = None
 def init_session(_session: requests_cache.CachedSession = None):
     global session
     if not _session:
-        session = requests_cache.CachedSession(expire_after=360)
+        session = requests_cache.CachedSession(expire_after=600)
     elif not session:
         session = _session
 
@@ -184,7 +184,7 @@ def get_triggering_skills(id: int, flag: str = "skill", region: str = "JP"):
     return json.loads(response.text)
 
 
-def get_np_chargers(sval_value: int = 5000, region: str = "JP"):
+def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = "JP"):
     np_charge_functions = get_functions(type="gainNp", region=region)
     np_charge_functions_self = []
     np_charge_functions_exceptself = []
@@ -209,6 +209,10 @@ def get_np_chargers(sval_value: int = 5000, region: str = "JP"):
     
     servants_self = [servant for servant in servants_self if servant.get("collectionNo") != 0]
     servants_exceptself = [servant for servant in servants_exceptself if servant.get("collectionNo") != 0]
+
+    if class_name:
+        servants_self = [servant for servant in servants_self if servant.get("className") == class_name]
+        servants_exceptself = [servant for servant in servants_exceptself if servant.get("className") == class_name]
 
     servants_self = remove_duplicates(servants_self)
     servants_exceptself = remove_duplicates(servants_exceptself)
@@ -235,16 +239,36 @@ def get_np_chargers(sval_value: int = 5000, region: str = "JP"):
         else:
             servants_self_other.append({ "totalSvals": total_sval, "details": servant_details })
 
-    servants_exceptself_sval = []
+    servants_exceptself_aoe = []
+    servants_exceptself_st = []
+    servants_exceptself_other = []
     
     for servant in servants_exceptself:
         servant_details = get_servant_by_id(session, servant.get("id"), region, False)
         total_sval = get_total_sval(servant_details, False)
         if total_sval < sval_value:
             continue
-        servants_exceptself_sval.append({ "totalSvals": total_sval, "details": servant_details })
 
-    pass
+        nps = servant_details.get("noblePhantasms")
+        if not nps or len(nps) == 0:
+            continue
+
+        effectFlags = nps[0].get("effectFlags")
+        if "attackEnemyAll" in effectFlags:
+            servants_exceptself_aoe.append({ "totalSvals": total_sval, "details": servant_details })
+        elif "attackEnemyOne" in effectFlags:
+            servants_exceptself_st.append({ "totalSvals": total_sval, "details": servant_details })
+        else:
+            servants_exceptself_other.append({ "totalSvals": total_sval, "details": servant_details })
+
+    return {
+        "selfAoe": servants_self_aoe,
+        "selfSt": servants_self_st,
+        "selfOther": servants_self_other,
+        "allyAoe": servants_exceptself_aoe,
+        "allySt": servants_exceptself_st,
+        "allyOther": servants_exceptself_other,
+    }
 
 
 def get_total_sval(servant, is_self: bool):
@@ -266,6 +290,9 @@ def get_total_sval(servant, is_self: bool):
             if function.get("funcType") != "gainNp":
                 continue
             if "enemy" in function.get("funcTargetType"):
+                continue
+            functvals = function.get("functvals")
+            if functvals and len(functvals) > 0:
                 continue
             if is_self and function.get("funcTargetType") == "self":
                 total_sval += function.get("svals")[-1].get("Value")
