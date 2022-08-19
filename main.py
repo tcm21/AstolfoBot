@@ -13,6 +13,7 @@ from gacha_calc import roll
 from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id, remove_zeros_decimal
 import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
+import missions as ms
 
 token = os.environ.get("TOKEN")
 parser = configparser.ConfigParser()
@@ -819,6 +820,26 @@ async def np_chargers(
     await send_paginator(ctx, pages)
 
 
+@bot.command(
+    description="Get current weekly missions"
+)
+@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+async def missions(
+    ctx: interactions.CommandContext,
+    region: str = "JP",
+):
+    ms.init_session(session)
+    await ctx.defer()
+    descs = ms.get_current_weeklies(region)
+    embed = interactions.Embed(
+            title=f"Current weeklies ({region})",
+            description="\n".join(descs),
+            color=0xf2aba6
+        )
+
+    await ctx.send(embeds=embed)
+
+
 async def send_paginator(ctx: interactions.CommandContext, pages):
     """ Creates a paginator for the pages
 
@@ -972,6 +993,7 @@ async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str 
 @bot.autocomplete(command="region", name="region")
 @bot.autocomplete(command="support", name="region")
 @bot.autocomplete(command="np-chargers", name="region")
+@bot.autocomplete(command="missions", name="region")
 async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
     choices = []
     choices.append(interactions.Choice(name="NA", value="NA"))
