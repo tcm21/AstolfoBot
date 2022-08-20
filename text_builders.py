@@ -66,7 +66,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         sval_value2 = svals_level[0].get("Value2")
         sval_userate = svals_level[0].get("UseRate")
         sval_target = svals_level[0].get("Target")
+        sval_targetlist = svals_level[0].get("TargetList")
         sval_starhigher = svals_level[0].get("StarHigher")
+        sval_correction = svals_level[0].get("Correction")
         svals_overcharge = [svals_level[0]]
         if is_np: svals_overcharge = [
             function.get("svals")[0],
@@ -119,7 +121,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 
                 if is_np:
                     # For servants with correction (supereffective dmg) or chance increase on NP level up instead of NP damage (e.g. Euryale)
-                    if not all(sval.get("Correction") == svals_level[0].get("Correction") for sval in svals_level):
+                    if not all(sval.get("Correction") == sval_correction for sval in svals_level):
                         for svalIdx, sval in enumerate(svals_level):
                             valuesTextList.append(f'{get_sval_from_buff(sval.get("Correction"), buff_type, func_type)}{str(svalIdx + 1).translate(SUB)}')
                         np_text = " (Level)" if is_np and NpFunctionType.LEVEL in np_function_type else ""
@@ -136,7 +138,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
             if is_np:
                 if sval_target and func_type == "damageNpIndividual":
-                    supereffective_target = get_trait_desc(session, sval_target, region)
+                        supereffective_target = get_trait_desc(session, sval_target, region)
+                if sval_targetlist and func_type == "damageNpIndividualSum":
+                    supereffective_target = get_trait_desc(session, sval_targetlist[0], region)
                     
         else:
             if buff_type == "counterFunction":
@@ -199,7 +203,10 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
         
         func_target_text = title_case(target_desc_dict.get(function.get("funcTargetType")))
         if not func_target_text: func_target_text = title_case(function.get("funcTargetType"))
-        if func_type == "damageNpIndividual":
+        if func_type.startswith("damageNpIndividualSum"):
+            # Taira no Kagekiyo
+            skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}] with {remove_zeros_decimal(sval_correction / 10)}% bonus damage for each [{supereffective_target}] on the field (Max {svals_level[0].get("ParamAddMaxCount")})')
+        elif func_type.startswith("damageNpIndividual"):
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}] with bonus damage to [{supereffective_target}]')
         elif func_type.startswith("damageNp"):
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}]')
