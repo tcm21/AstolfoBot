@@ -374,7 +374,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     if buffType2:
         embed.add_field("Effect 2", buff_desc_dict.get(buffType2), True)
     if trait:
-        embed.add_field("Affected Trait", title_case(get_traits(session)[trait]), True)
+        embed.add_field("Affected Trait", title_case(get_traits()[trait]), True)
     if region:
         embed.add_field("Region", region, True)
 
@@ -874,7 +874,7 @@ def get_np_type(np_type: str):
 
 # Autocomplete functions
 def populate_enum_list(enumName: str, input_value: str):
-    fnEnums = get_enums(session, enumName)
+    fnEnums = get_enums(enumName)
     options = fnEnums.values()
     filteredOptions = [
         option for option in options
@@ -913,7 +913,7 @@ def populate_target_list(input_value: str):
 
 
 def populate_traits(input_value: str):
-    traits = get_traits(session)
+    traits = get_traits()
     filteredTraits = dict(filter(lambda elem:
         (input_value.upper() in elem[1].upper() or input_value.upper() in title_case(elem[1]).upper()),
         traits.items()

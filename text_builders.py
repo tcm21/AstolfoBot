@@ -2,6 +2,7 @@ import requests_cache
 import json
 import re
 from enum import Flag
+import fgo_api_types.enums as enums
 
 SUB = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 
@@ -95,7 +96,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             target_traits = []
             for tval in func_tvals:
                 if int(tval.get("id")) >= 5000: continue
-                target_traits.append(get_trait_desc(session, tval.get("id")))
+                target_traits.append(get_trait_desc(tval.get("id")))
             target_vals_text = f' with trait [{", ".join(target_traits)}]'
 
         buff_type = function.get("buffs")[0].get("type") if function.get("buffs") and len(function.get("buffs")) > 0 else ""
@@ -113,9 +114,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 else:
                     is_single_value = True
                     if buff_type == "addIndividuality": # Add trait
-                        values_text = f'{get_trait_desc(session, svals_level[0].get("Value"), region)}'
+                        values_text = f'{get_trait_desc(svals_level[0].get("Value"), region)}'
                     elif buff_type == "fieldIndividuality": # Change fields
-                        values_text = f'{get_field_desc(session, svals_level[0].get("Value"), region)}'
+                        values_text = f'{get_trait_desc(svals_level[0].get("Value"), region)}'
                     else:
                         values_text = f'{get_sval_from_buff(svals_level[0].get("Value"), buff_type, func_type)}'
                 
@@ -138,9 +139,9 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 values_text = f'Value{np_text}: {" · ".join(valuesTextList)}'
             if is_np:
                 if sval_target and func_type == "damageNpIndividual":
-                        supereffective_target = get_trait_desc(session, sval_target, region)
+                        supereffective_target = get_trait_desc(sval_target, region)
                 if sval_targetlist and func_type == "damageNpIndividualSum":
-                    supereffective_target = get_trait_desc(session, sval_targetlist[0], region)
+                    supereffective_target = get_trait_desc(sval_targetlist[0], region)
                     
         else:
             if buff_type == "counterFunction":
@@ -226,7 +227,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             if func_quest_tvals:
                 target_traits = []
                 for tval in func_quest_tvals:
-                    target_traits.append(get_field_desc(session, tval.get("id"), region))
+                    target_traits.append(get_trait_desc(tval.get("id"), region))
                 if len(target_traits) > 0: function_effect += f' on [{", ".join(target_traits)}]'
 
             ck_self_indv = function.get("buffs")[0].get("ckSelfIndv") # Cards
@@ -241,7 +242,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                 target_traits = []
                 for ck in ck_op_indv:
                     if int(ck.get("id")) < 3000:
-                        trait_desc = get_trait_desc(session, ck.get("id"), region)
+                        trait_desc = get_trait_desc(ck.get("id"), region)
                     else:
                         trait_desc = title_case(ck.get("name"))
                     target_traits.append(trait_desc)
@@ -253,7 +254,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             traitvals_text = []
             for tval in traitvals:
                 if int(tval.get("id")) >= 5000: continue
-                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+                traitvals_text.append(get_trait_desc(tval.get("id")))
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}] to [{func_target_text}]{target_vals_text} {turns_count_text}')
         elif func_type == "moveState":
             # Lady Avalon, Van Gogh, ...
@@ -263,7 +264,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             traitvals_text = []
             for tval in traitvals:
                 if int(tval.get("id")) >= 5000: continue
-                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+                traitvals_text.append(get_trait_desc(tval.get("id")))
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}] to [{func_target_text}]{target_vals_text} {turns_count_text}')
         elif func_type == "subState":
             # Remove effects
@@ -273,7 +274,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
             traitvals_text = []
             for tval in traitvals:
                 if int(tval.get("id")) >= 5000: continue
-                traitvals_text.append(get_trait_desc(session, tval.get("id")))
+                traitvals_text.append(get_trait_desc(tval.get("id")))
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} [{", ".join(traitvals_text)}]{remove_text} from [{func_target_text}]{target_vals_text} {turns_count_text}')
         else:
             skill_descs.append(f'**{sub_skill_text}Effect {funcIdx + 1}**: {previous_function_text}{function_effect}{inline_value_text} to [{func_target_text}]{target_vals_text} {turns_count_text}')
@@ -332,27 +333,14 @@ def title_case(string):
     return " ".join(words)
 
 
-def get_trait_desc(session: requests_cache.CachedSession, trait_id: str | int, region: str = "JP"):
-    id = str(trait_id)
-    trait_name = get_traits(session).get(id)
-    trait_name = title_case(trait_name if trait_name else "unknown")
-    if id.startswith("4"):
+def get_trait_desc(trait_id: str | int, region: str = "JP"):
+    trait = enums.TRAIT_NAME.get(int(trait_id))
+    trait_name = title_case(trait.value if trait else "unknown")
+    if str(trait_id).startswith("4"):
         # Cards
         return trait_name
-    url = f'https://apps.atlasacademy.io/db/{region}/entities?trait={id}'
+    url = f'https://apps.atlasacademy.io/db/{region}/entities?trait={trait_id}'
     return f'[{trait_name}]({url})'
-
-
-def get_field_desc(session: requests_cache.CachedSession, trait_id: str | int, region: str = "JP"):
-    id = str(trait_id)
-    trait_name = get_traits(session).get(id)
-    trait_name = title_case(trait_name if trait_name else "unknown")
-    if id.startswith("4"):
-        # Cards
-        return trait_name
-    url = f'https://apps.atlasacademy.io/db/{region}/quests?fieldIndividuality={id}'
-    return f'[{trait_name}]({url})'
-
 
 
 def get_function_by_id(session: requests_cache.CachedSession, id: int, region: str = "JP"):
@@ -431,17 +419,12 @@ def get_servant_by_id(session, id: int, region: str = "JP", lore: bool = True):
         return servant
 
 
-def get_enums(session: requests_cache.CachedSession, enum_type: str):
-    response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_enums.json")  # JP and NA use the same enums
-    enums = json.loads(response.text)
-    return enums.get(enum_type)
+def get_enums(enum_type: str):
+    return enums.ALL_ENUMS.get(enum_type)
 
 
-def get_traits(session: requests_cache.CachedSession):
-    response = session.get(
-        f"https://api.atlasacademy.io/export/JP/nice_trait.json")  # JP and NA use the same enums
-    return json.loads(response.text)
+def get_traits():
+    return { str(id): trait.value for id, trait in enums.TRAIT_NAME.items()}
 
 
 func_desc_dict = {
