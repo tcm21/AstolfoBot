@@ -15,20 +15,13 @@ import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
 import missions as ms
 
-token = os.environ.get("TOKEN")
-parser = configparser.ConfigParser()
-if not token:
-    parser.read('env.config')
-    token = parser.get('Auth', 'TOKEN')
 
-scopes = os.environ.get("SCOPES")
-if not scopes:
-    parser.read('env.config')
-    scopes = parser.get('Auth', 'SCOPES', fallback=None)
-
-
-commands = ["/servant", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
+commands = ["/servant", "/missions", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
 currentCmdIdx = 0
+
+session = requests_cache.CachedSession(expire_after=600)
+bot = None
+
 
 def new_presence() -> interactions.ClientPresence:
     global currentCmdIdx
@@ -46,15 +39,6 @@ def new_presence() -> interactions.ClientPresence:
         status="online",
     )
 
-bot = interactions.Client(
-    token = token,
-    default_scope = int(scopes) if scopes else None,
-    presence = new_presence()
-)
-
-setup(bot)
-
-session = requests_cache.CachedSession(expire_after=600)
 
 def get_servant(name: str, cv_id: str, class_name: str, region: str = "JP"):
     """Gets the servant info based on the search query.
@@ -400,119 +384,6 @@ def common_elements(*lists):
 
 default_regions = {}
 
-# Commands
-@bot.command(
-    name="region",
-    description="Get/Set default region for a server",
-)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def region(
-    ctx: interactions.CommandContext,
-    region: str = ""
-):
-    if not region:
-        if default_regions.get(ctx.guild_id) == None:
-            region = "JP"
-            default_regions[ctx.guild_id] = region
-            await ctx.send(f"Server region is: \"{region}\".")
-            return
-        else:
-            await ctx.send(f"Server region is: \"{default_regions.get(ctx.guild_id)}\".")
-            return
-
-    default_regions[ctx.guild_id] = region
-    await ctx.send(f"Server default region set to \"{region}\".")
-
-
-@bot.command(
-    description="Servant info lookup",
-)
-@interactions.option(str, name="servant-name", description="Servant name", required=False)
-@interactions.option(str, name="cv", description="CV", required=False, autocomplete=True)
-@interactions.option(str, name="class-name", description="Class name", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def servant(
-    ctx: interactions.CommandContext,
-    servantName: str = "",
-    cv: str = "",
-    className: str = "",
-    region: str = ""
-):
-    if not servantName and not cv and not className:
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id] if not region else region
-
-    await ctx.defer()
-    servants = get_servant(servantName, cv, className, region)
-    if servants == None or len(servants) == 0:
-        await ctx.send("Not found.")
-        return
-    if len(servants) == 1:
-        servant = get_servant_by_id(session, servants[0].get("id"), region)
-        pages = create_servant_pages(servant, region)
-        await send_paginator(ctx, pages)
-    else:
-        options = []
-        for index, servant in enumerate(servants):
-            options.append(interactions.SelectOption(
-                label=f"{servant.get('id')}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
-        select_menu = interactions.SelectMenu(
-            options=options,
-            placeholder="Select one...",
-            custom_id="menu_component",
-        )
-
-        embed = interactions.Embed(
-            title=f"{len(servants)} matches found.",
-            color=0xf2aba6
-        )
-
-        if servantName:
-            embed.add_field("Servant name", servantName, True)
-        if cv:
-            embed.add_field("Voice actor", get_cv_name(cv, region), True)
-        if className:
-            embed.add_field("Class", title_case(className), True)
-        if region:
-            embed.add_field("Region", region, True)
-        message = await ctx.send(content=None, components=select_menu, embeds=embed)
-
-        async def check(menu_ctx):
-            if int(menu_ctx.author.user.id) == int(ctx.author.user.id):
-                return True
-            await ctx.send("This is not for you!", ephemeral=True)
-            return False
-
-        try:
-            await wait_for_component(
-                bot=bot,
-                components=select_menu,
-                check=check,
-                timeout=60,
-            )
-        except asyncio.TimeoutError:
-            select_menu.disabled = True
-            await message.edit(content=None, components=select_menu, embeds=embed)
-
-
-@bot.component("menu_component")
-async def select_response(ctx: interactions.ComponentContext, value=[]):
-    id = value[0].split(":")[0]
-    region = value[0].split(":")[1]
-
-    await ctx.defer()
-    servant = get_servant_by_id(session, id, region)
-    pages = create_servant_pages(servant, region)
-    await ctx.message.delete()
-    await send_paginator(ctx, pages)
-
-
 async def find_logic(
     ctx: interactions.CommandContext,
     type: str = "",
@@ -543,301 +414,6 @@ async def find_logic(
 
     pages = get_skills(type, type2, flag, target, buff, buff2, trait, region)
     return pages
-
-
-@bot.command()
-async def search(ctx: interactions.CommandContext):
-    pass
-
-
-@search.subcommand(
-    description="Search for servants with skills that matches the specified parameters",
-)
-@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
-@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def skill(
-    ctx: interactions.CommandContext,
-    effect: str = "",
-    effect2: str = "",
-    target: str = "",
-    trait: str = "",
-    region: str = "",
-):
-    await ctx.defer()
-    pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
-    await send_paginator(ctx, pages)
-
-
-@search.subcommand(
-    description="Search for servants with NP that matches the specified parameters",
-)
-@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
-@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def np(
-    ctx: interactions.CommandContext,
-    effect: str = "",
-    effect2: str = "",
-    target: str = "",
-    trait: str = "",
-    region: str = "",
-):
-    await ctx.defer()
-    pages = await find_logic(ctx, effect, effect2, target, trait, region, "NP")
-    await send_paginator(ctx, pages)
-
-
-@search.subcommand(
-    description="Search for servants with NP and/or skills that matches the specified parameters",
-    name="skill-or-np"
-)
-@interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
-@interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
-@interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
-@interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def skillOrNp(
-    ctx: interactions.CommandContext,
-    effect: str = "",
-    effect2: str = "",
-    target: str = "",
-    trait: str = "",
-    region: str = "",
-):
-    await ctx.defer()
-    pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
-    pages.extend(await find_logic(ctx, effect, effect2, target, trait, region, "NP"))
-    await send_paginator(ctx, pages)
-
-
-@bot.command(
-    description="Gets support list from friend code"
-)
-@interactions.option(str, name="friend-code", description="Friend code", required=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def support(
-    ctx: interactions.CommandContext,
-    friend_code: str = "",
-    region: str = "",
-):
-    if not friend_code:
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id] if not region else region
-
-    await ctx.defer()
-    friend_code = friend_code.replace(",","")
-    r = session.get(f"https://rayshift.io/api/v1/support/decks/{region}/{friend_code}")
-    data = json.loads(r.text)
-    if data.get("status") != 200:
-        if data.get("status") == 404:
-            await ctx.send(f"{data.get('message')}.\nTry visiting the [Rayshift website](https://rayshift.io/{region.lower()}/{friend_code})")
-            return
-        await ctx.send(data.get("message"))
-        return
-
-    pages = []
-    normal_cnt = 0
-    event_cnt = 0
-    for deckId in data.get('response').get('decksPresent'):
-        title = ""
-
-        if deckId in [1, 2, 4]:
-            normal_cnt += 1
-            title = f"Normal Deck #{normal_cnt}"
-        elif deckId in [8, 16, 32]:
-            event_cnt += 1
-            title = f"Event Deck #{event_cnt}"
-
-        embed = interactions.Embed(
-            title=title,
-            color=0xf2aba6
-        )
-
-        embed.add_field("Name", data.get('response').get('name'), True)
-        embed.add_field("Friend code", '{:,}'.format(int(friend_code)), True)
-
-        ascensionImgUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/{deckId}/1.png"
-        embed.set_image(url=ascensionImgUrl)
-        embed.set_footer("Data via Rayshift.io")
-        pages.append(Page(title, embed))
-
-    await send_paginator(ctx, pages)
-
-
-@bot.command(
-    description="Check your chances of getting a servant"
-)
-@interactions.option(str, name="number-of-quartz", description="Number of quartz", required=True)
-@interactions.option(str, name="number-of-tickets", description="Number of tickets. Default: 0", required=False)
-@interactions.option(str, name="chance", description="Servant probability (In percent). Default: 0.8%", required=False)
-async def gacha(
-    ctx: interactions.CommandContext,
-    number_of_quartz: str,
-    number_of_tickets: str = "0",
-    chance: str = "0.8",
-):
-    embed = interactions.Embed(
-        title="Gacha chance",
-        color=0xf2aba6
-    )
-
-    def is_float(element) -> bool:
-        try:
-            float(element)
-            return True
-        except ValueError:
-            return False
-
-    if not is_float(number_of_quartz) or not is_float(number_of_tickets) or not is_float(chance):
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    response = session.get(
-        f"https://api.atlasacademy.io/nice/JP/equip/9807190")
-    ce = json.loads(response.text)
-    embed.set_thumbnail(
-        url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
-    )
-
-    result_text = roll(int(number_of_quartz), int(number_of_tickets), float(chance) / 100)
-    embed.description = result_text
-    await ctx.send(embeds=embed)
-
-
-@bot.command(
-    name="np-chargers",
-    description="Get all servants with NP chargers"
-)
-@interactions.option(str, name="amount", description="NP charge amount (In percent)", required=True)
-@interactions.option(str, name="target", description="NP charge target", required=True, autocomplete=True)
-@interactions.option(str, name="np-type", description="Servant NP type", required=False, autocomplete=True)
-@interactions.option(str, name="class-name", description="Servant class", required=False, autocomplete=True)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def np_chargers(
-    ctx: interactions.CommandContext,
-    amount: str,
-    target: str,
-    np_type: str = "",
-    class_name: str = "",
-    region: str = "",
-):
-    if not amount.isnumeric() or not target:
-        await ctx.send(content="Invalid input.", ephemeral=True)
-        return
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id] if not region else region
-
-    skill_lookup.init_session(session)
-
-    await ctx.defer()
-    np_chargers = get_np_chargers(int(amount) * 100, class_name, region)
-    servants_list = []
-    match target:
-        case "Self":
-            match np_type:
-                case "aoe":
-                    servants_list = np_chargers.get("selfAoe")
-                case "st":
-                    servants_list = np_chargers.get("selfSt")
-                case "other":
-                    servants_list = np_chargers.get("selfOther")
-                case _:
-                    servants_list.extend(np_chargers.get("selfAoe"))
-                    servants_list.extend(np_chargers.get("selfSt"))
-                    servants_list.extend(np_chargers.get("selfOther"))
-        case "Ally":
-            match np_type:
-                case "aoe":
-                    servants_list = np_chargers.get("allyAoe")
-                case "st":
-                    servants_list = np_chargers.get("allySt")
-                case "other":
-                    servants_list = np_chargers.get("allyOther")
-                case _:
-                    servants_list.extend(np_chargers.get("allyAoe"))
-                    servants_list.extend(np_chargers.get("allySt"))
-                    servants_list.extend(np_chargers.get("allyOther"))
-                    
-    if len(servants_list) == 0:
-        await ctx.send("Not found.", ephemeral=True)
-        return
-
-    maxLimit = 20
-    totalCount = 0
-    pages = []
-    embeds = []
-    embed = None
-
-    def key_func(s):
-        return s["totalSvals"]
-
-    servants_list.sort(key=key_func, reverse=True)
-    for index, result in enumerate(servants_list):
-        if index % maxLimit == 0:
-            if embed: embeds.append(embed)
-            embed = interactions.Embed(
-                    title=f"NP Chargers List",
-                    color=0xf2aba6
-                )
-            embed.set_thumbnail("https://static.atlasacademy.io/JP/SkillIcons/skill_00601.png")
-            embed.add_field("Charge Amount", f'At least {amount}%', True)
-            embed.add_field("Target", target, True)
-            if np_type: embed.add_field("NP Type", get_np_type(np_type), True)
-            if class_name: embed.add_field("Class", title_case(class_name), True)
-            embed.add_field("Region", region, True)
-    
-        servant = result.get("details")
-        value = result.get("totalSvals")
-        servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})'
-        if embed.description:
-            embed.description += f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
-        else:
-            embed.description = f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
-        totalCount += 1
-
-    embeds.append(embed)
-    cnt = 0
-    for embed in embeds:
-        cnt += 1
-        pages.append(Page(
-            f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount} " if totalCount > 0 else "", embed))
-
-    await send_paginator(ctx, pages)
-
-
-@bot.command(
-    description="Get current weekly missions"
-)
-@interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
-async def missions(
-    ctx: interactions.CommandContext,
-    region: str = "JP",
-):
-    ms.init_session(session)
-    await ctx.defer()
-    descs = ms.get_current_weeklies(region)
-    embed = interactions.Embed(
-            title=f"Current weeklies ({region})",
-            description="\n".join(descs),
-            color=0xf2aba6
-        )
-
-    await ctx.send(embeds=embed)
 
 
 async def send_paginator(ctx: interactions.CommandContext, pages):
@@ -926,22 +502,18 @@ def populate_traits(input_value: str):
     return choices
 
 # Load CV list
-response = session.get(
-    f"https://api.atlasacademy.io/export/JP/nice_cv.json")
-cv_list_jp = json.loads(response.text)
-response = session.get(
-    f"https://api.atlasacademy.io/export/JP/nice_cv_lang_en.json")
-cv_list_jp_en = json.loads(response.text)
-cv_list = {}
-for cv_jp in cv_list_jp:
-    cv_en = next(cv for cv in cv_list_jp_en if cv.get("id") == cv_jp.get("id"))
-    cv_list[cv_jp.get("id")] = f"{cv_jp.get('name')} ({cv_en.get('name')})"
+cv_list_jp = []
+cv_list_jp_en = []
+def populate_cv(input_value: str = ""):
+    cv_list = {}
+    for (jp_cv_dict), (en_cv_dict) in zip(cv_list_jp, cv_list_jp_en):
+        if jp_cv_dict.get("name") == "---": continue
+        cv_list[jp_cv_dict.get("id")] = f'{jp_cv_dict.get("name")} ({en_cv_dict.get("name")})'
 
-
-def populate_cv(input_value: str):
     matched_cvs = [
         cv for cv in cv_list.items() if input_value.upper() in cv[1].upper()
     ]
+
     choices = []
     for cv in matched_cvs[0:24]:
         choices.append(interactions.Choice(name=cv[1], value=str(cv[0])))
@@ -957,74 +529,514 @@ def get_cv_name(cv_id: str, region: str = "JP"):
     return cv_name.get('name')
 
 
-@bot.autocomplete(command="servant", name="cv")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = ""):
-    await ctx.populate(populate_cv(cv))
+def main():
+    token = os.environ.get("TOKEN")
+    parser = configparser.ConfigParser()
+    if not token:
+        parser.read('env.config')
+        token = parser.get('Auth', 'TOKEN')
+
+    scopes = os.environ.get("SCOPES")
+    if not scopes:
+        parser.read('env.config')
+        scopes = parser.get('Auth', 'SCOPES', fallback=None)
+
+    global bot
+    bot = interactions.Client(
+        token = token,
+        default_scope = int(scopes) if scopes else None,
+        presence = new_presence()
+    )
+
+    setup(bot)
+
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_cv.json")
+    global cv_list_jp
+    cv_list_jp = json.loads(response.text)
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_cv_lang_en.json")
+    global cv_list_jp_en
+    cv_list_jp_en = json.loads(response.text)
+
+    # Commands
+    @bot.command(
+        name="region",
+        description="Get/Set default region for a server",
+    )
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def region(
+        ctx: interactions.CommandContext,
+        region: str = ""
+    ):
+        if not region:
+            if default_regions.get(ctx.guild_id) == None:
+                region = "JP"
+                default_regions[ctx.guild_id] = region
+                await ctx.send(f"Server region is: \"{region}\".")
+                return
+            else:
+                await ctx.send(f"Server region is: \"{default_regions.get(ctx.guild_id)}\".")
+                return
+
+        default_regions[ctx.guild_id] = region
+        await ctx.send(f"Server default region set to \"{region}\".")
 
 
-@bot.autocomplete(command="servant", name="class-name")
-@bot.autocomplete(command="np-chargers", name="class-name")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, className: str = ""):
-    await ctx.populate(populate_enum_list("SvtClass", className))
+    @bot.command(
+        description="Servant info lookup",
+    )
+    @interactions.option(str, name="servant-name", description="Servant name", required=False)
+    @interactions.option(str, name="cv", description="CV", required=False, autocomplete=True)
+    @interactions.option(str, name="class-name", description="Class name", required=False, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def servant(
+        ctx: interactions.CommandContext,
+        servantName: str = "",
+        cv: str = "",
+        className: str = "",
+        region: str = ""
+    ):
+        if not servantName and not cv and not className:
+            await ctx.send(content="Invalid input.", ephemeral=True)
+            return
+
+        if not region and default_regions.get(ctx.guild_id) == None:
+            region = "JP"
+            default_regions[ctx.guild_id] = region
+
+        region = default_regions[ctx.guild_id] if not region else region
+
+        await ctx.defer()
+        servants = get_servant(servantName, cv, className, region)
+        if servants == None or len(servants) == 0:
+            await ctx.send("Not found.")
+            return
+        if len(servants) == 1:
+            servant = get_servant_by_id(session, servants[0].get("id"), region)
+            pages = create_servant_pages(servant, region)
+            await send_paginator(ctx, pages)
+        else:
+            options = []
+            for index, servant in enumerate(servants):
+                options.append(interactions.SelectOption(
+                    label=f"{servant.get('id')}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
+            select_menu = interactions.SelectMenu(
+                options=options,
+                placeholder="Select one...",
+                custom_id="menu_component",
+            )
+
+            embed = interactions.Embed(
+                title=f"{len(servants)} matches found.",
+                color=0xf2aba6
+            )
+
+            if servantName:
+                embed.add_field("Servant name", servantName, True)
+            if cv:
+                embed.add_field("Voice actor", get_cv_name(cv, region), True)
+            if className:
+                embed.add_field("Class", title_case(className), True)
+            if region:
+                embed.add_field("Region", region, True)
+            message = await ctx.send(content=None, components=select_menu, embeds=embed)
+
+            async def check(menu_ctx):
+                if int(menu_ctx.author.user.id) == int(ctx.author.user.id):
+                    return True
+                await ctx.send("This is not for you!", ephemeral=True)
+                return False
+
+            try:
+                await wait_for_component(
+                    bot=bot,
+                    components=select_menu,
+                    check=check,
+                    timeout=60,
+                )
+            except asyncio.TimeoutError:
+                select_menu.disabled = True
+                await message.edit(content=None, components=select_menu, embeds=embed)
 
 
-@bot.autocomplete(command="search", name="effect")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
-    await ctx.populate(populate_type_list(type))
+    @bot.component("menu_component")
+    async def select_response(ctx: interactions.ComponentContext, value=[]):
+        id = value[0].split(":")[0]
+        region = value[0].split(":")[1]
+
+        await ctx.defer()
+        servant = get_servant_by_id(session, id, region)
+        pages = create_servant_pages(servant, region)
+        await ctx.message.delete()
+        await send_paginator(ctx, pages)
+
+    @bot.command()
+    async def search(ctx: interactions.CommandContext):
+        pass
 
 
-@bot.autocomplete(command="search", name="effect2")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
-    await ctx.populate(populate_type_list(type2))
+    @search.subcommand(
+        description="Search for servants with skills that matches the specified parameters",
+    )
+    @interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+    @interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
+    @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
+    @interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def skill(
+        ctx: interactions.CommandContext,
+        effect: str = "",
+        effect2: str = "",
+        target: str = "",
+        trait: str = "",
+        region: str = "",
+    ):
+        await ctx.defer()
+        pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
+        await send_paginator(ctx, pages)
 
 
-@bot.autocomplete(command="search", name="target")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    await ctx.populate(populate_target_list(target))
+    @search.subcommand(
+        description="Search for servants with NP that matches the specified parameters",
+    )
+    @interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+    @interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
+    @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
+    @interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def np(
+        ctx: interactions.CommandContext,
+        effect: str = "",
+        effect2: str = "",
+        target: str = "",
+        trait: str = "",
+        region: str = "",
+    ):
+        await ctx.defer()
+        pages = await find_logic(ctx, effect, effect2, target, trait, region, "NP")
+        await send_paginator(ctx, pages)
 
 
-@bot.autocomplete(command="search", name="trait")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
-    await ctx.populate(populate_traits(trait))
+    @search.subcommand(
+        description="Search for servants with NP and/or skills that matches the specified parameters",
+        name="skill-or-np"
+    )
+    @interactions.option(str, name="effect", description="Effect 1", required=False, autocomplete=True)
+    @interactions.option(str, name="effect2", description="Effect 2", required=False, autocomplete=True)
+    @interactions.option(str, name="target", description="Target", required=False, autocomplete=True)
+    @interactions.option(str, name="trait", description="Affected trait", required=False, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def skillOrNp(
+        ctx: interactions.CommandContext,
+        effect: str = "",
+        effect2: str = "",
+        target: str = "",
+        trait: str = "",
+        region: str = "",
+    ):
+        await ctx.defer()
+        pages = await find_logic(ctx, effect, effect2, target, trait, region, "skill")
+        pages.extend(await find_logic(ctx, effect, effect2, target, trait, region, "NP"))
+        await send_paginator(ctx, pages)
 
 
-@bot.autocomplete(command="servant", name="region")
-@bot.autocomplete(command="search", name="region")
-@bot.autocomplete(command="region", name="region")
-@bot.autocomplete(command="support", name="region")
-@bot.autocomplete(command="np-chargers", name="region")
-@bot.autocomplete(command="missions", name="region")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
-    choices = []
-    choices.append(interactions.Choice(name="NA", value="NA"))
-    choices.append(interactions.Choice(name="JP", value="JP"))
-    await ctx.populate(choices)
+    @bot.command(
+        description="Gets support list from friend code"
+    )
+    @interactions.option(str, name="friend-code", description="Friend code", required=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def support(
+        ctx: interactions.CommandContext,
+        friend_code: str = "",
+        region: str = "",
+    ):
+        if not friend_code:
+            await ctx.send(content="Invalid input.", ephemeral=True)
+            return
+
+        if not region and default_regions.get(ctx.guild_id) == None:
+            region = "JP"
+            default_regions[ctx.guild_id] = region
+
+        region = default_regions[ctx.guild_id] if not region else region
+
+        await ctx.defer()
+        friend_code = friend_code.replace(",","")
+        r = session.get(f"https://rayshift.io/api/v1/support/decks/{region}/{friend_code}")
+        data = json.loads(r.text)
+        if data.get("status") != 200:
+            if data.get("status") == 404:
+                await ctx.send(f"{data.get('message')}.\nTry visiting the [Rayshift website](https://rayshift.io/{region.lower()}/{friend_code})")
+                return
+            await ctx.send(data.get("message"))
+            return
+
+        pages = []
+        normal_cnt = 0
+        event_cnt = 0
+        for deckId in data.get('response').get('decksPresent'):
+            title = ""
+
+            if deckId in [1, 2, 4]:
+                normal_cnt += 1
+                title = f"Normal Deck #{normal_cnt}"
+            elif deckId in [8, 16, 32]:
+                event_cnt += 1
+                title = f"Event Deck #{event_cnt}"
+
+            embed = interactions.Embed(
+                title=title,
+                color=0xf2aba6
+            )
+
+            embed.add_field("Name", data.get('response').get('name'), True)
+            embed.add_field("Friend code", '{:,}'.format(int(friend_code)), True)
+
+            ascensionImgUrl = f"https://rayshift.io/static/images/deck-gen/{region}/{friend_code}/{data.get('response').get('guid')}/{deckId}/1.png"
+            embed.set_image(url=ascensionImgUrl)
+            embed.set_footer("Data via Rayshift.io")
+            pages.append(Page(title, embed))
+
+        await send_paginator(ctx, pages)
 
 
-@bot.autocomplete(command="np-chargers", name="target")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    choices = []
-    choices.append(interactions.Choice(name="Self", value="Self"))
-    choices.append(interactions.Choice(name="Ally", value="Ally"))
-    await ctx.populate(choices)
+    @bot.command(
+        description="Check your chances of getting a servant"
+    )
+    @interactions.option(str, name="number-of-quartz", description="Number of quartz", required=True)
+    @interactions.option(str, name="number-of-tickets", description="Number of tickets. Default: 0", required=False)
+    @interactions.option(str, name="chance", description="Servant probability (In percent). Default: 0.8%", required=False)
+    async def gacha(
+        ctx: interactions.CommandContext,
+        number_of_quartz: str,
+        number_of_tickets: str = "0",
+        chance: str = "0.8",
+    ):
+        embed = interactions.Embed(
+            title="Gacha chance",
+            color=0xf2aba6
+        )
+
+        def is_float(element) -> bool:
+            try:
+                float(element)
+                return True
+            except ValueError:
+                return False
+
+        if not is_float(number_of_quartz) or not is_float(number_of_tickets) or not is_float(chance):
+            await ctx.send(content="Invalid input.", ephemeral=True)
+            return
+
+        response = session.get(
+            f"https://api.atlasacademy.io/nice/JP/equip/9807190")
+        ce = json.loads(response.text)
+        embed.set_thumbnail(
+            url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
+        )
+
+        result_text = roll(int(number_of_quartz), int(number_of_tickets), float(chance) / 100)
+        embed.description = result_text
+        await ctx.send(embeds=embed)
 
 
-@bot.autocomplete(command="np-chargers", name="np-type")
-async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
-    choices = []
-    choices.append(interactions.Choice(name=get_np_type("aoe"), value="aoe"))
-    choices.append(interactions.Choice(name=get_np_type("st"), value="st"))
-    choices.append(interactions.Choice(name=get_np_type("other"), value="other"))
-    await ctx.populate(choices)
+    @bot.command(
+        name="np-chargers",
+        description="Get all servants with NP chargers"
+    )
+    @interactions.option(str, name="amount", description="NP charge amount (In percent)", required=True)
+    @interactions.option(str, name="target", description="NP charge target", required=True, autocomplete=True)
+    @interactions.option(str, name="np-type", description="Servant NP type", required=False, autocomplete=True)
+    @interactions.option(str, name="class-name", description="Servant class", required=False, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def np_chargers(
+        ctx: interactions.CommandContext,
+        amount: str,
+        target: str,
+        np_type: str = "",
+        class_name: str = "",
+        region: str = "",
+    ):
+        if not amount.isnumeric() or not target:
+            await ctx.send(content="Invalid input.", ephemeral=True)
+            return
+
+        if not region and default_regions.get(ctx.guild_id) == None:
+            region = "JP"
+            default_regions[ctx.guild_id] = region
+
+        region = default_regions[ctx.guild_id] if not region else region
+
+        skill_lookup.init_session(session)
+
+        await ctx.defer()
+        np_chargers = get_np_chargers(int(amount) * 100, class_name, region)
+        servants_list = []
+        match target:
+            case "Self":
+                match np_type:
+                    case "aoe":
+                        servants_list = np_chargers.get("selfAoe")
+                    case "st":
+                        servants_list = np_chargers.get("selfSt")
+                    case "other":
+                        servants_list = np_chargers.get("selfOther")
+                    case _:
+                        servants_list.extend(np_chargers.get("selfAoe"))
+                        servants_list.extend(np_chargers.get("selfSt"))
+                        servants_list.extend(np_chargers.get("selfOther"))
+            case "Ally":
+                match np_type:
+                    case "aoe":
+                        servants_list = np_chargers.get("allyAoe")
+                    case "st":
+                        servants_list = np_chargers.get("allySt")
+                    case "other":
+                        servants_list = np_chargers.get("allyOther")
+                    case _:
+                        servants_list.extend(np_chargers.get("allyAoe"))
+                        servants_list.extend(np_chargers.get("allySt"))
+                        servants_list.extend(np_chargers.get("allyOther"))
+                        
+        if len(servants_list) == 0:
+            await ctx.send("Not found.", ephemeral=True)
+            return
+
+        maxLimit = 20
+        totalCount = 0
+        pages = []
+        embeds = []
+        embed = None
+
+        def key_func(s):
+            return s["totalSvals"]
+
+        servants_list.sort(key=key_func, reverse=True)
+        for index, result in enumerate(servants_list):
+            if index % maxLimit == 0:
+                if embed: embeds.append(embed)
+                embed = interactions.Embed(
+                        title=f"NP Chargers List",
+                        color=0xf2aba6
+                    )
+                embed.set_thumbnail("https://static.atlasacademy.io/JP/SkillIcons/skill_00601.png")
+                embed.add_field("Charge Amount", f'At least {amount}%', True)
+                embed.add_field("Target", target, True)
+                if np_type: embed.add_field("NP Type", get_np_type(np_type), True)
+                if class_name: embed.add_field("Class", title_case(class_name), True)
+                embed.add_field("Region", region, True)
+        
+            servant = result.get("details")
+            value = result.get("totalSvals")
+            servant_desc = f'[{servant.get("name")} ({title_case(servant.get("className"))})](https://apps.atlasacademy.io/db/JP/servant/{servant.get("id")})'
+            if embed.description:
+                embed.description += f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
+            else:
+                embed.description = f'{index + 1}: {servant_desc} ({remove_zeros_decimal(value / 100)}%) {"★"*servant.get("rarity")}\n'
+            totalCount += 1
+
+        embeds.append(embed)
+        cnt = 0
+        for embed in embeds:
+            cnt += 1
+            pages.append(Page(
+                f"{1 + maxLimit * (cnt - 1)}-{min(totalCount, cnt * maxLimit)} of {totalCount} " if totalCount > 0 else "", embed))
+
+        await send_paginator(ctx, pages)
 
 
-@bot.event
-async def on_start():
-    status_task.start()
+    @bot.command(
+        description="Get current weekly missions"
+    )
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def missions(
+        ctx: interactions.CommandContext,
+        region: str = "JP",
+    ):
+        ms.init_session(session)
+        await ctx.defer()
+        descs = ms.get_current_weeklies(region)
+        embed = interactions.Embed(
+                title=f"Current weeklies ({region})",
+                description="\n".join(descs),
+                color=0xf2aba6
+            )
+
+        await ctx.send(embeds=embed)
+
+    @bot.autocomplete(command="servant", name="cv")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = ""):
+        await ctx.populate(populate_cv(cv))
 
 
-@create_task(IntervalTrigger(600))
-async def status_task():
-    await bot.change_presence(new_presence())
+    @bot.autocomplete(command="servant", name="class-name")
+    @bot.autocomplete(command="np-chargers", name="class-name")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, className: str = ""):
+        await ctx.populate(populate_enum_list("SvtClass", className))
 
-bot.start()
+
+    @bot.autocomplete(command="search", name="effect")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, type: str = ""):
+        await ctx.populate(populate_type_list(type))
+
+
+    @bot.autocomplete(command="search", name="effect2")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, type2: str = ""):
+        await ctx.populate(populate_type_list(type2))
+
+
+    @bot.autocomplete(command="search", name="target")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
+        await ctx.populate(populate_target_list(target))
+
+
+    @bot.autocomplete(command="search", name="trait")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, trait: str = ""):
+        await ctx.populate(populate_traits(trait))
+
+
+    @bot.autocomplete(command="servant", name="region")
+    @bot.autocomplete(command="search", name="region")
+    @bot.autocomplete(command="region", name="region")
+    @bot.autocomplete(command="support", name="region")
+    @bot.autocomplete(command="np-chargers", name="region")
+    @bot.autocomplete(command="missions", name="region")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
+        choices = []
+        choices.append(interactions.Choice(name="NA", value="NA"))
+        choices.append(interactions.Choice(name="JP", value="JP"))
+        await ctx.populate(choices)
+
+
+    @bot.autocomplete(command="np-chargers", name="target")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
+        choices = []
+        choices.append(interactions.Choice(name="Self", value="Self"))
+        choices.append(interactions.Choice(name="Ally", value="Ally"))
+        await ctx.populate(choices)
+
+
+    @bot.autocomplete(command="np-chargers", name="np-type")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, target: str = ""):
+        choices = []
+        choices.append(interactions.Choice(name=get_np_type("aoe"), value="aoe"))
+        choices.append(interactions.Choice(name=get_np_type("st"), value="st"))
+        choices.append(interactions.Choice(name=get_np_type("other"), value="other"))
+        await ctx.populate(choices)
+
+
+    @bot.event
+    async def on_start():
+        status_task.start()
+
+
+    @create_task(IntervalTrigger(600))
+    async def status_task():
+        await bot.change_presence(new_presence())
+
+    bot.start()
+
+
+if __name__ == "__main__":
+    main()
