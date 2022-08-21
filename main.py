@@ -144,7 +144,7 @@ def create_servant_pages(servant, region):
         skill_descriptions.append(servant_desc)
         # Sort Skill No ASC, ID ASC (Unlocks after strengthening)
         for skill in sorted(servant.get('skills'), key=lambda s: (s.get('num'), s.get('id'))):
-            skill_descriptions.append("\n")
+            skill_descriptions.append("")
             skill_descriptions.append(f"**Skill {skill.get('num')}: [{skill.get('name')}](https://apps.atlasacademy.io/db/JP/skill/{skill.get('id')})**")
             skill_descriptions.append(get_skill_description(session, skill, False, region))
 
@@ -164,7 +164,7 @@ def create_servant_pages(servant, region):
         )
         np_descriptions.append(servant_desc)
         for i, noblePhantasm in enumerate(servant.get("noblePhantasms")):
-            np_descriptions.append("\n")
+            np_descriptions.append("")
             np_description = get_skill_description(session, noblePhantasm, False, region)
             np_url = f'https://apps.atlasacademy.io/db/JP/noble-phantasm/{noblePhantasm.get("id")}'
             np_descriptions.append(f"**Noble Phantasm {i + 1}:**")
@@ -393,7 +393,7 @@ def check_region(guild_id: int, region: str):
             region = "JP"
             db.set_region(guild_id, region)
 
-    return region
+    return region.upper()
 
 
 async def find_logic(
@@ -579,6 +579,7 @@ def main():
         ctx: interactions.CommandContext,
         region: str = ""
     ):
+        await ctx.defer()
         if not region:
             current_region = db.get_region(ctx.guild_id)
             if not current_region:

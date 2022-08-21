@@ -1,20 +1,32 @@
-import sqlite3
+import os
+import psycopg2
+import configparser
 
-DB_NAME = 'data.db'
+DATABASE_URL = os.environ.get("DATABASE_URL")
+parser = configparser.ConfigParser()
+if not DATABASE_URL:
+    parser.read('env.config')
+    DATABASE_URL = parser.get('Auth', 'DATABASE_URL')
+
+
 def init_region_db():
-    with sqlite3.connect(DB_NAME) as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS regions(guild_id INTEGER PRIMARY KEY, region STRING)')
+    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+        cur = conn.cursor()
+        cur.execute('CREATE TABLE IF NOT EXISTS regions(guild_id BIGINT PRIMARY KEY, region VARCHAR(2))')
 
 
 def set_region(guild_id: int, region: str):
-    with sqlite3.connect(DB_NAME) as conn:
-        conn.execute(f'INSERT OR REPLACE INTO regions(guild_id, region) values({guild_id}, "{region}")')
+    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+        cur = conn.cursor()
+        cur.execute(f'INSERT INTO regions(guild_id, region) values({guild_id}, \'{region}\') ON CONFLICT (guild_id) DO UPDATE SET region=\'{region}\'')
         conn.commit()
 
 
 def get_region(guild_id: int):
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.execute(f'SELECT region FROM regions WHERE guild_id = {guild_id}')
-        for row in cursor:
+    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+        cur = conn.cursor()
+        cur.execute(f'SELECT region FROM regions WHERE guild_id = {guild_id}')
+        row = cur.fetchone()
+        if row:
             return row[0]
     return None
