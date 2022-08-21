@@ -4,6 +4,7 @@ import json
 import interactions
 import requests_cache
 import os
+import db
 
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
@@ -382,7 +383,18 @@ def common_elements(*lists):
     [res.append(x) for x in common_list if x not in res]
     return res
 
-default_regions = {}
+
+def check_region(guild_id: int, region: str):
+    if not region:
+        db_region = db.get_region(guild_id)
+        if db_region:
+            region = db_region
+        else:
+            region = "JP"
+            db.set_region(guild_id, region)
+
+    return region
+
 
 async def find_logic(
     ctx: interactions.CommandContext,
@@ -396,12 +408,8 @@ async def find_logic(
     if not type and not type2 and not target and not trait:
         await ctx.send(content="Invalid input.", ephemeral=True)
         return []
-
-    if not region and default_regions.get(ctx.guild_id) == None:
-        region = "JP"
-        default_regions[ctx.guild_id] = region
-
-    region = default_regions[ctx.guild_id] if not region else region
+    
+    region = check_region(ctx.guild_id, region)
 
     buff = ""
     buff2 = ""
@@ -530,6 +538,8 @@ def get_cv_name(cv_id: str, region: str = "JP"):
 
 
 def main():
+    db.init_region_db()
+
     token = os.environ.get("TOKEN")
     parser = configparser.ConfigParser()
     if not token:
@@ -570,16 +580,17 @@ def main():
         region: str = ""
     ):
         if not region:
-            if default_regions.get(ctx.guild_id) == None:
+            current_region = db.get_region(ctx.guild_id)
+            if not current_region:
                 region = "JP"
-                default_regions[ctx.guild_id] = region
+                db.set_region(ctx.guild_id, region)
                 await ctx.send(f"Server region is: \"{region}\".")
                 return
             else:
-                await ctx.send(f"Server region is: \"{default_regions.get(ctx.guild_id)}\".")
+                await ctx.send(f"Server region is: \"{current_region}\".")
                 return
 
-        default_regions[ctx.guild_id] = region
+        db.set_region(ctx.guild_id, region)
         await ctx.send(f"Server default region set to \"{region}\".")
 
 
@@ -601,11 +612,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        if not region and default_regions.get(ctx.guild_id) == None:
-            region = "JP"
-            default_regions[ctx.guild_id] = region
-
-        region = default_regions[ctx.guild_id] if not region else region
+        region = check_region(ctx.guild_id, region)
 
         await ctx.defer()
         servants = get_servant(servantName, cv, className, region)
@@ -755,11 +762,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        if not region and default_regions.get(ctx.guild_id) == None:
-            region = "JP"
-            default_regions[ctx.guild_id] = region
-
-        region = default_regions[ctx.guild_id] if not region else region
+        region = check_region(ctx.guild_id, region)
 
         await ctx.defer()
         friend_code = friend_code.replace(",","")
@@ -862,11 +865,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        if not region and default_regions.get(ctx.guild_id) == None:
-            region = "JP"
-            default_regions[ctx.guild_id] = region
-
-        region = default_regions[ctx.guild_id] if not region else region
+        region = check_region(ctx.guild_id, region)
 
         skill_lookup.init_session(session)
 
