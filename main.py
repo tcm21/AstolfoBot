@@ -951,10 +951,11 @@ def main():
     @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
     async def missions(
         ctx: interactions.CommandContext,
-        region: str = "JP",
+        region: str = "",
     ):
         ms.init_session(session)
         await ctx.defer()
+        region = check_region(ctx.guild_id, region)
         descs = ms.get_current_weeklies(region)
         embed = interactions.Embed(
                 title=f"Current weeklies ({region})",
