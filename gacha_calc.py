@@ -38,5 +38,5 @@ def roll(number_of_quartz: int, number_of_tickets: int, p: float = 0.008) -> str
         text = f'**NP{str(r_values[i])}+:** {get_percentage_text(sum)}'
         result_text.append(text)
 
-    result_text.append(f'\nNumber of yukichis needed: {int(number_of_quartz / 168) + (1 if number_of_quartz > 0 else 0)}')
+    result_text.append(f'\nNumber of yukichis needed: {int(number_of_quartz / 168) + (1 if number_of_quartz > 0 and number_of_quartz % 168 != 0 else 0)}')
     return "\n".join(result_text)

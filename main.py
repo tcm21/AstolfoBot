@@ -88,8 +88,8 @@ def create_servant_pages(servant, region):
         url=faceAssetUrl,
     )
 
-    servant_name = servant.get('name')
-    if region == "JP" and servant.get('name') != servant.get('ruby'):
+    servant_name = servant.get('originalName') if region == "JP" else servant.get('name')
+    if region == "JP" and servant.get('originalName') != servant.get('ruby'):
         servant_name += "\n" + servant.get('ruby')
     embed.add_field("Name", servant_name, True)
     embed.add_field("Rarity", "★"*servant.get('rarity'), True)
@@ -169,7 +169,8 @@ def create_servant_pages(servant, region):
             np_url = f'https://apps.atlasacademy.io/db/JP/noble-phantasm/{noblePhantasm.get("id")}'
             np_descriptions.append(f"**Noble Phantasm {i + 1}:**")
             np_descriptions.append(f"[{noblePhantasm.get('name')} {noblePhantasm.get('rank')} ({noblePhantasm.get('card').capitalize()})]({np_url})")
-            if noblePhantasm.get("ruby") and noblePhantasm.get("name") != noblePhantasm.get("ruby"):
+            np_descriptions.append(noblePhantasm.get("originalName"))
+            if noblePhantasm.get("ruby") and noblePhantasm.get("originalName") != noblePhantasm.get("ruby"):
                 np_descriptions.append(noblePhantasm.get("ruby"))
             np_descriptions.append(np_description)
         
