@@ -21,7 +21,7 @@ commands = ["/servant", "/missions", "/np-chargers", "/search skill", "/search n
 currentCmdIdx = 0
 
 session = requests_cache.CachedSession(expire_after=600)
-bot = None
+bot: interactions.Client = None
 
 
 def new_presence() -> interactions.ClientPresence:
