@@ -15,9 +15,10 @@ from text_builders import get_skill_description, title_case, get_enums, get_trai
 import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
 import missions as ms
+import fgo_api_types.nice as nice
 
 
-commands = ["/servant", "/missions", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
+commands = ["/servant", "/missions", "/drops", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
 currentCmdIdx = 0
 
 session = requests_cache.CachedSession(expire_after=600)
@@ -529,6 +530,19 @@ def populate_cv(input_value: str = ""):
     return choices
 
 
+def get_item_list():
+    response = session.get(
+        f"https://api.atlasacademy.io/export/JP/nice_item_lang_en.json")
+    return [nice.NiceItem.parse_obj(item) for item in json.loads(response.text)]
+
+
+def populate_items(input_value: str = ""):
+    items = [item for item in get_item_list() if item.uses and len(item.uses) > 0]
+
+    matched_items = [item for item in items if input_value.upper() in item.name.upper() or input_value.upper() in str(item.id).upper()]
+    return [interactions.Choice(name=item.name, value=str(item.id)) for item in matched_items[0:24]]
+
+
 def get_cv_name(cv_id: str, region: str = "JP"):
     if region == "JP":
         cv_name = next(cv for cv in cv_list_jp if cv.get("id") == int(cv_id))
@@ -967,6 +981,37 @@ def main():
 
         await ctx.send(embeds=embed)
 
+
+    @bot.command(
+        description="Get drop chance for an item"
+    )
+    @interactions.option(str, name="item", description="Item", required=True, autocomplete=True)
+    @interactions.option(str, name="region", description="Region (Default: JP)", required=False, autocomplete=True)
+    async def drops(
+        ctx: interactions.CommandContext,
+        item: str = "",
+        region: str = "",
+    ):
+        await ctx.defer()
+        region = check_region(ctx.guild_id, region)
+        item_details = next(nice_item for nice_item in get_item_list() if str(nice_item.id) == item)
+
+        from drops import get_drop_rates
+        drops_df = get_drop_rates(item_details.name, region)
+        if drops_df is None or drops_df.empty:
+            await ctx.send("Not found.", ephemeral=True)
+            return
+
+        text = [f'{idx + 1}: **Quest**: [{drop["Area"]} - {drop["Quest"]}]({drop["Hyperlink"]}#{drop["Quest"].replace(" ", "_")}) **AP/Drop**: {"{:.2f}".format(drop["AP/Drop"]).rstrip("0").rstrip(".")}' for idx, drop in drops_df.iterrows()]
+        embed = interactions.Embed(
+                title=f"Quests that drop [{item_details.name}] ({region})",
+                description="\n".join(text),
+                color=0xf2aba6
+            )
+        embed.set_thumbnail(item_details.icon)
+        await ctx.send(embeds=embed)
+
+
     @bot.autocomplete(command="servant", name="cv")
     async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = ""):
         await ctx.populate(populate_cv(cv))
@@ -1004,6 +1049,7 @@ def main():
     @bot.autocomplete(command="support", name="region")
     @bot.autocomplete(command="np-chargers", name="region")
     @bot.autocomplete(command="missions", name="region")
+    @bot.autocomplete(command="drops", name="region")
     async def autocomplete_choice_list(ctx: interactions.CommandContext, region: str = ""):
         choices = []
         choices.append(interactions.Choice(name="NA", value="NA"))
@@ -1026,6 +1072,11 @@ def main():
         choices.append(interactions.Choice(name=get_np_type("st"), value="st"))
         choices.append(interactions.Choice(name=get_np_type("other"), value="other"))
         await ctx.populate(choices)
+
+
+    @bot.autocomplete(command="drops", name="item")
+    async def autocomplete_choice_list(ctx: interactions.CommandContext, item: str = ""):
+        await ctx.populate(populate_items(item))
 
 
     @bot.event
