@@ -16,6 +16,7 @@ import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
 import missions as ms
 import fgo_api_types.nice as nice
+import fgo_api_types.enums as enums
 
 
 commands = ["/servant", "/missions", "/drops", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
@@ -979,6 +980,36 @@ def main():
                 color=0xf2aba6
             )
 
+        await ctx.send(embeds=embed)
+
+        # AP-Efficient quests
+        import quests
+        quests.init_session(session)
+        final_results = quests.get_optimized_quests(region)
+        if not final_results or len(final_results) == 0:
+            return
+
+        desc_text = []
+        desc_text.append('')
+        total_ap = 0
+        idx = 0
+        for quest, count in final_results.items():
+            desc_text.append(f'**{idx + 1}: [{quest.name}](https://apps.atlasacademy.io/db/JP/quest/{quest.id}/3) - {quest.spot_name} - {quest.war_name} x {count}**')
+            for search_query, enemy_count in quest.count_foreach_target.items():
+                if isinstance(search_query.trait_id, list):
+                    trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
+                else:
+                    trait_name = title_case(enums.TRAIT_NAME[search_query.trait_id].value)
+                desc_text.append(f"{trait_name} x {enemy_count}")
+            desc_text.append(f'{quest.ap_cost}AP x {count} = {quest.ap_cost * count}AP')
+            total_ap += (quest.ap_cost * count)
+            idx += 1
+        desc_text.append(f"**Total:** {total_ap}AP")
+        embed = interactions.Embed(
+            title=f"Most AP-efficient free quests for this week's missions ({region})",
+            description="\n".join(desc_text),
+            color=0xf2aba6
+        )
         await ctx.send(embeds=embed)
 
 

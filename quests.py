@@ -142,7 +142,7 @@ def main():
     if region != "JP" and region != "NA":
         region = "JP"
 
-    final_results = get_optimized_quests(region)
+    final_results = get_optimized_quests(region=region)
 
     total_ap = 0
     for quest, count in final_results.items():
@@ -158,7 +158,7 @@ def main():
     print(f"Total: {total_ap}AP")
 
 
-def get_optimized_quests(region: str) -> dict[QuestResult, int]:
+def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
     master_mission_id: int
     target_traits: list[TraitSearchQuery] = []
     import missions
@@ -201,7 +201,7 @@ def get_optimized_quests(region: str) -> dict[QuestResult, int]:
                 quest_details.consume,
                 quest_details.name,
                 quest_details.spotName,
-                quest_details.warLongName,
+                quest_details.warLongName.replace("\n", ", "),
             )
             quest_result.count_foreach_target = count_foreach_target
             final_results[quest_result] = drop.count
@@ -277,7 +277,8 @@ def get_optimized_quests(region: str) -> dict[QuestResult, int]:
             drop.target_count = enemy_count
             drop.count = count
             drops.append(drop)
-    db.populate_drop_data(drops, region)
+    if len(drops) > 0:
+        db.populate_drop_data(drops, region)
 
     return final_results
 
