@@ -1,4 +1,5 @@
 
+from doctest import master
 from requests_cache import CachedSession
 from itertools import groupby
 import json
@@ -110,7 +111,13 @@ def get_free_quests_with_trait(trait_query: TraitSearchQuery, region: str = "JP"
     return [basic.BasicQuestPhase.parse_obj(quest) for quest in free_quests]
 
 
-def get_quest_details(quest_id: int, phase: int, region: str = "JP"):
+def get_quest_details(quest_id: int, region: str = "JP"):
+    url = f"https://api.atlasacademy.io/nice/{region}/quest/{quest_id}?lang=en"
+    response = session.get(url)
+    return nice.NiceQuest.parse_obj(json.loads(response.text))
+
+
+def get_quest_phase_details(quest_id: int, phase: int, region: str = "JP"):
     url = f"https://api.atlasacademy.io/nice/{region}/quest/{quest_id}/{phase}?lang=en"
     response = session.get(url)
     return nice.NiceQuestPhase.parse_obj(json.loads(response.text))
@@ -135,6 +142,24 @@ def main():
     if region != "JP" and region != "NA":
         region = "JP"
 
+    final_results = get_optimized_quests(region)
+
+    total_ap = 0
+    for quest, count in final_results.items():
+        print(quest)
+        for search_query, enemy_count in quest.count_foreach_target.items():
+            if isinstance(search_query.trait_id, list):
+                trait_name = ", ".join([enums.TRAIT_NAME[id].value for id in search_query.trait_id])
+            else:
+                trait_name = enums.TRAIT_NAME[search_query.trait_id].value
+            print(f"{trait_name} * {enemy_count}")
+        print(f'{quest.ap_cost}AP * {count} = {quest.ap_cost * count}AP')
+        total_ap += (quest.ap_cost * count)
+    print(f"Total: {total_ap}AP")
+
+
+def get_optimized_quests(region: str) -> dict[QuestResult, int]:
+    master_mission_id: int
     target_traits: list[TraitSearchQuery] = []
     import missions
     missions.init_session()
@@ -152,6 +177,35 @@ def main():
                         cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value)
                     ):
                         target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
+            master_mission_id = master_mission.id
+            break
+
+    import db
+    db.init_optimized_quests_db()
+    drop_data: list[db.OptimizedDrop] = db.get_drop_data(master_mission_id, region)
+    if drop_data and len(drop_data) > 0:
+        final_results: dict[QuestResult, int] = {}
+        for q_id, quest_group in groupby(drop_data, lambda x: x.quest_id):
+            count_foreach_target: dict[TraitSearchQuery, int] = {}
+            quest_details = get_quest_details(q_id, region)
+            for drop in quest_group:
+                if "," in drop.target_id:
+                    target_id = [int(id) for id in drop.target_id.split(",")]
+                else:
+                    target_id = int(drop.target_id)
+
+                search_query = TraitSearchQuery(target_id, 0)
+                count_foreach_target[search_query] = drop.target_count
+            quest_result = QuestResult(
+                q_id,
+                quest_details.consume,
+                quest_details.name,
+                quest_details.spotName,
+                quest_details.warLongName,
+            )
+            quest_result.count_foreach_target = count_foreach_target
+            final_results[quest_result] = drop.count
+        return final_results
 
     # quests = [get_free_quests(region)]
     quests: list[basic.BasicQuestPhase] = []
@@ -171,29 +225,12 @@ def main():
 
     quests = None
 
-    # Loads from disk
-    # all_details = get_quest_details_disk(region)
-    # quests_with_details = [next(detail for detail in all_details if detail.id == quest.id) for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
-    # all_details = None
-
-    # Loads from API
-    # quests_with_details = [get_quest_details(quest.id, quest.phase, region) for quest in quests_max_phase]
-
-    # target_traits: list[TraitSearchQuery] = [
-    #     TraitSearchQuery(201, 15),
-    #     TraitSearchQuery(2019, 15),
-    #     TraitSearchQuery([200, 1000], 3),
-    #     TraitSearchQuery([301, 1000], 3),
-    #     TraitSearchQuery([303, 1000], 3),
-    # ]
-
     qes: list[QuestEnemies] = []
     for quest_basic in quests_max_phase:
-        quest = get_quest_details(quest_basic.id, quest_basic.phase, region)
+        quest = get_quest_phase_details(quest_basic.id, quest_basic.phase, region)
         all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
         qe = QuestEnemies(quest.id, quest.consume, all_enemies, quest.name, quest.spotName, quest.warLongName)
         qes.append(qe)
-    quests_with_details = None
 
     quest_results: list[QuestResult] = []
     for q in qes:
@@ -226,18 +263,23 @@ def main():
     
     quest_results = None
 
-    total_ap = 0
-    for quest, count in final_results.items():
-        print(quest)
-        for search_query, enemy_count in quest.count_foreach_target.items():
+    # Insert DB
+    drops: list[db.OptimizedDrop] = []
+    for result, count in final_results.items():
+        for search_query, enemy_count in result.count_foreach_target.items():
+            drop: db.OptimizedDrop = db.OptimizedDrop(None, None, None, None, None)
+            drop.master_mission_id = master_mission_id
+            drop.quest_id = result.id
             if isinstance(search_query.trait_id, list):
-                trait_name = ", ".join([enums.TRAIT_NAME[id].value for id in search_query.trait_id])
+                drop.target_id = ",".join([str(id) for id in search_query.trait_id])
             else:
-                trait_name = enums.TRAIT_NAME[search_query.trait_id].value
-            print(f"{trait_name} * {enemy_count}")
-        print(f'{quest.ap_cost}AP * {count} = {quest.ap_cost * count}AP')
-        total_ap += (quest.ap_cost * count)
-    print(f"Total: {total_ap}AP")
+                drop.target_id = search_query.trait_id
+            drop.target_count = enemy_count
+            drop.count = count
+            drops.append(drop)
+    db.populate_drop_data(drops, region)
+
+    return final_results
 
 
 def get_final_results(target_traits: list[TraitSearchQuery], quest_results: list[QuestResult], final_results: dict[QuestResult, int]):
@@ -287,7 +329,7 @@ def init_data_from_api():
         for key, quest_group in groupby(quests, lambda x: x.id)
     ]
     
-    quests_with_details = [get_quest_details(quest.id, quest.phase, region) for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
+    quests_with_details = [get_quest_phase_details(quest.id, quest.phase, region) for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
     json_text = []
     for quest in quests_with_details:
         json_text.append(quest.json())
