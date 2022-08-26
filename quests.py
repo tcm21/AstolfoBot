@@ -17,24 +17,6 @@ def init_session(_session: CachedSession = CachedSession(expire_after=600)):
     if not session:
         session = _session
 
-def get_free_quests(region: str = "JP"):
-    url = f"https://api.atlasacademy.io/basic/{region}/quest/phase/search?type=free&flag=displayLoopmark&lang=en"
-    response = session.get(url)
-    free_quests = json.loads(response.text)
-    return [basic.BasicQuestPhase.parse_obj(quest) for quest in free_quests]
-
-
-def get_quest_details(quest_id: int, phase: int, region: str = "JP"):
-    url = f"https://api.atlasacademy.io/nice/{region}/quest/{quest_id}/{phase}?lang=en"
-    response = session.get(url)
-    return nice.NiceQuestPhase.parse_obj(json.loads(response.text))
-
-
-def get_quest_details_disk(region: str = "JP"):
-    with open("test.json", encoding="utf-8") as f:
-        all_details = json.load(f)
-        return [nice.NiceQuestPhase.parse_obj(detail) for detail in all_details]
-
 
 class TraitSearchQuery:
     trait_id: int | list[int]
@@ -106,6 +88,44 @@ class QuestResult:
         return self.id == other.id
 
 
+def get_free_quests(region: str = "JP"):
+    url = f"https://api.atlasacademy.io/basic/{region}/quest/phase/search?type=free&flag=displayLoopmark&lang=en"
+    response = session.get(url)
+    free_quests = json.loads(response.text)
+    return [basic.BasicQuestPhase.parse_obj(quest) for quest in free_quests]
+
+
+def get_free_quests_with_trait(trait_query: TraitSearchQuery, region: str = "JP") -> list[basic.BasicQuestPhase] | None:
+    if not trait_query or not trait_query.trait_id:
+        return None
+
+    if isinstance(trait_query.trait_id, list):
+        trait_querystr = "".join([f'&enemyTrait={id}' for id in trait_query.trait_id])
+    else:
+        trait_querystr = f'&enemyTrait={trait_query.trait_id}'
+
+    url = f"https://api.atlasacademy.io/basic/{region}/quest/phase/search?type=free&flag=displayLoopmark&lang=en{trait_querystr}"
+    response = session.get(url)
+    free_quests = json.loads(response.text)
+    return [basic.BasicQuestPhase.parse_obj(quest) for quest in free_quests]
+
+
+def get_quest_details(quest_id: int, phase: int, region: str = "JP"):
+    url = f"https://api.atlasacademy.io/nice/{region}/quest/{quest_id}/{phase}?lang=en"
+    response = session.get(url)
+    return nice.NiceQuestPhase.parse_obj(json.loads(response.text))
+
+
+def get_quest_details_disk(region: str = "JP"):
+    with open("test.json", encoding="utf-8") as f:
+        all_details = json.load(f)
+        return [nice.NiceQuestPhase.parse_obj(detail) for detail in all_details]
+
+
+def remove_duplicates(list):
+    return [i for n, i in enumerate(list) if i not in list[n + 1:]]
+
+
 def main():
     init_session()
     region = "JP"
@@ -115,20 +135,7 @@ def main():
     if region != "JP" and region != "NA":
         region = "JP"
 
-    quests = get_free_quests(region)
-
-    # Gets max phase (repeatable quest)
-    quests_max_phase = [
-        max(quest_group, key=lambda x: x.phase)
-        for key, quest_group in groupby(quests, lambda x: x.id)
-    ]
-
-    all_details = get_quest_details_disk(region)
-    quests_with_details = [next(detail for detail in all_details if detail.id == quest.id) for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
-    all_details = None
-
     target_traits: list[TraitSearchQuery] = []
-
     import missions
     missions.init_session()
     master_missions = missions.load_missions(region)
@@ -140,10 +147,37 @@ def main():
         if delta.days == 6: # Weekly
             for mission in master_mission.missions:
                 for cond in mission.conds:
-                    if cond.detail:
-                        match cond.detail.missionCondType:
-                            case enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value | enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value:
-                                target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
+                    if (cond.detail and
+                        (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value or 
+                        cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value)
+                    ):
+                        target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
+
+    # quests = [get_free_quests(region)]
+    quests: list[basic.BasicQuestPhase] = []
+    for target_trait in target_traits:
+        quests_with_traits = get_free_quests_with_trait(target_trait, region)
+        quests.extend(quests_with_traits)
+    
+    quests = remove_duplicates(quests)
+
+    # Gets max phase (repeatable quest)
+    quests_max_phase = [
+        max(quest_group, key=lambda x: x.phase)
+        for key, quest_group in groupby(quests, lambda x: x.id)
+    ]
+
+    quests_max_phase = [quest for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
+
+    quests = None
+
+    # Loads from disk
+    # all_details = get_quest_details_disk(region)
+    # quests_with_details = [next(detail for detail in all_details if detail.id == quest.id) for quest in quests_max_phase if quest.afterClear == nice.NiceQuestAfterClearType.repeatLast]
+    # all_details = None
+
+    # Loads from API
+    # quests_with_details = [get_quest_details(quest.id, quest.phase, region) for quest in quests_max_phase]
 
     # target_traits: list[TraitSearchQuery] = [
     #     TraitSearchQuery(201, 15),
@@ -154,7 +188,8 @@ def main():
     # ]
 
     qes: list[QuestEnemies] = []
-    for quest in quests_with_details:
+    for quest_basic in quests_max_phase:
+        quest = get_quest_details(quest_basic.id, quest_basic.phase, region)
         all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
         qe = QuestEnemies(quest.id, quest.consume, all_enemies, quest.name, quest.spotName, quest.warLongName)
         qes.append(qe)
@@ -188,6 +223,8 @@ def main():
     while (any(target.remain > 0 for target in target_traits)):
         quest_results.sort(key=lambda r: get_score(r))
         get_final_results(target_traits, quest_results, final_results)
+    
+    quest_results = None
 
     total_ap = 0
     for quest, count in final_results.items():
