@@ -2,7 +2,10 @@
 
 A discord bot for looking up FGO info from [Atlas Academy API](https://api.atlasacademy.io/rapidoc)
 * Servant info
-* NP/Skills info
+* NP/Skills search by traits, target
+* Current weekly missions
+* Calculate gacha chance
+* List NP chargers
 
 [Bot Invite Link](https://discord.com/api/oauth2/authorize?client_id=1005691850834837584&permissions=1024&scope=bot%20applications.commands)
 
@@ -10,8 +13,24 @@ When developing, use your own env.config file or set TOKEN in the environment va
 ```
 [Auth]
 TOKEN=<your token here>
+DATABASE_URL=<PostgresDB URL>
+SCOPES=<Discord Guild IDs. Can be empty>
 ```
-### To-do list
-* Search by effects granted by skills during NP (e.g Miyu's NP)
-* Search servants by traits
-* ...
+## Commands
+### /servant
+Gets servant info
+
+### /missions
+Gets current weekly mission
+
+### /drops
+Finds drop location for materials
+
+### /np-chargers
+Lists the NP chargers
+
+### /search
+Search for a skill or NP that meets the criteria
+
+### /gacha
+Gacha probability calculation
