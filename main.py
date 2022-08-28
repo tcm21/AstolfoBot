@@ -9,6 +9,7 @@ import db
 from interactions.ext.paginator import Page, Paginator
 from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
+from interactions.ext.persistence import PersistentCustomID
 from gacha_calc import roll
 
 from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id, remove_zeros_decimal
@@ -547,7 +548,7 @@ def populate_items(input_value: str = ""):
 def get_cv_name(cv_id: str, region: str = "JP"):
     if region == "JP":
         cv_name = next(cv for cv in cv_list_jp if cv.get("id") == int(cv_id))
-    elif region == "NA":
+    else:
         cv_name = next(
             cv for cv in cv_list_jp_en if cv.get("id") == int(cv_id))
     return cv_name.get('name')
@@ -575,6 +576,7 @@ def main():
     )
 
     setup(bot)
+    bot.load("interactions.ext.persistence", cipher_key="88AC2B8B21E65C3ACD467CE939E685C9")
 
     response = session.get(
         f"https://api.atlasacademy.io/export/JP/nice_cv.json")
@@ -642,7 +644,7 @@ def main():
             await send_paginator(ctx, pages)
         else:
             options = []
-            for index, servant in enumerate(servants):
+            for index, servant in enumerate(servants[0:20]):
                 options.append(interactions.SelectOption(
                     label=f"{servant.get('id')}: {servant.get('name')} ({title_case(servant.get('className'))})", value=f"{servant.get('id')}:{region}"))
             select_menu = interactions.SelectMenu(
@@ -652,7 +654,7 @@ def main():
             )
 
             embed = interactions.Embed(
-                title=f"{len(servants)} matches found.",
+                title=f"{len(servants)} matches found. Showing first 20 results.",
                 color=0xf2aba6
             )
 
@@ -981,13 +983,19 @@ def main():
                 color=0xf2aba6
             )
 
-        optimized_quests_button = interactions.Button(
-            style=interactions.ButtonStyle.PRIMARY,
-            label="Show optimal free quests",
-            custom_id="show_optimized" if region == "JP" else "show_optimized_na",
+        custom_id = PersistentCustomID(
+            bot,
+            "show_optimal_quests",
+            region,
         )
 
-        message = await ctx.send(embeds=embed, components=optimized_quests_button)
+        optimal_quests_button = interactions.Button(
+            style=interactions.ButtonStyle.PRIMARY,
+            label="Show optimal free quests",
+            custom_id=str(custom_id),
+        )
+
+        message = await ctx.send(embeds=embed, components=optimal_quests_button)
 
         async def check(btn_ctx: interactions.ComponentContext):
             if int(btn_ctx.author.user.id) == int(ctx.author.user.id):
@@ -998,26 +1006,21 @@ def main():
         try:
             await wait_for_component(
                 bot=bot,
-                components=optimized_quests_button,
+                components=optimal_quests_button,
                 check=check,
                 timeout=60,
             )
         except asyncio.TimeoutError:
-            optimized_quests_button.disabled = True
-            await message.edit(content=None, components=optimized_quests_button, embeds=embed)
+            optimal_quests_button.disabled = True
+            await message.edit(content=None, components=optimal_quests_button, embeds=embed)
 
 
-    @bot.component("show_optimized")
-    async def optimized_quests(ctx: interactions.ComponentContext):
-        await get_optimized_quests(ctx, "JP")
+    @bot.persistent_component("show_optimal_quests")
+    async def optimal_quests(ctx: interactions.ComponentContext, region):
+        await get_optimal_quests(ctx, region)
 
 
-    @bot.component("show_optimized_na")
-    async def optimized_quests_na(ctx: interactions.ComponentContext):
-        await get_optimized_quests(ctx, "NA")
-
-
-    async def get_optimized_quests(ctx: interactions.ComponentContext, region: str):
+    async def get_optimal_quests(ctx: interactions.ComponentContext, region: str):
         await ctx.defer()
         import quests
         quests.init_session(session)
@@ -1122,6 +1125,9 @@ def main():
         choices = []
         choices.append(interactions.Choice(name="NA", value="NA"))
         choices.append(interactions.Choice(name="JP", value="JP"))
+        choices.append(interactions.Choice(name="CN", value="CN"))
+        choices.append(interactions.Choice(name="KR", value="KR"))
+        choices.append(interactions.Choice(name="TW", value="TW"))
         await ctx.populate(choices)
 
 
