@@ -21,7 +21,8 @@ SCOPES=<Discord Guild IDs. Can be empty>
 Gets servant info
 
 ### /missions
-Gets current weekly mission
+Gets current weekly missions.
+Also shows the most optimal way to complete them (Free quests only).
 
 ### /drops
 Finds drop location for materials
