@@ -16,6 +16,7 @@ import skill_lookup
 from skill_lookup import get_skills_with_type, get_skills_with_buff, get_skills_with_trait, get_np_chargers
 import missions as ms
 import fgo_api_types.nice as nice
+import fgo_api_types.enums as enums
 
 
 commands = ["/servant", "/missions", "/drops", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
@@ -978,6 +979,72 @@ def main():
                 description="\n".join(descs),
                 color=0xf2aba6
             )
+
+        optimized_quests_button = interactions.Button(
+            style=interactions.ButtonStyle.PRIMARY,
+            label="Also show optimized quests?",
+            custom_id="show_optimized" if region == "JP" else "show_optimized_na",
+        )
+
+        message = await ctx.send(embeds=embed, components=optimized_quests_button)
+
+        async def check(btn_ctx: interactions.ComponentContext):
+            if int(btn_ctx.author.user.id) == int(ctx.author.user.id):
+                return True
+            await ctx.send("This is not for you!", ephemeral=True)
+            return False
+
+        try:
+            await wait_for_component(
+                bot=bot,
+                components=optimized_quests_button,
+                check=check,
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            optimized_quests_button.disabled = True
+            await message.edit(content=None, components=optimized_quests_button, embeds=embed)
+
+
+    @bot.component("show_optimized")
+    async def optimized_quests(ctx: interactions.ComponentContext):
+        await get_optimized_quests(ctx, "JP")
+
+
+    @bot.component("show_optimized_na")
+    async def optimized_quests_na(ctx: interactions.ComponentContext):
+        await get_optimized_quests(ctx, "NA")
+
+
+    async def get_optimized_quests(ctx: interactions.ComponentContext, region: str):
+        await ctx.defer()
+        import quests
+        quests.init_session(session)
+        final_results = quests.get_optimized_quests(region)
+        if not final_results or len(final_results) == 0:
+            return
+
+        desc_text = []
+        desc_text.append('')
+        total_ap = 0
+        idx = 0
+        for quest, count in final_results.items():
+            desc_text.append(f'**{idx + 1}: [{quest.name}](https://apps.atlasacademy.io/db/JP/quest/{quest.id}/3) - {quest.spot_name} - {quest.war_name} x {count}**')
+            for search_query, enemy_count in quest.count_foreach_trait.items():
+                if isinstance(search_query.trait_id, list):
+                    trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
+                else:
+                    trait_name = title_case(enums.TRAIT_NAME[search_query.trait_id].value)
+                desc_text.append(f"{trait_name} x {enemy_count}")
+            desc_text.append(f'{quest.cost}AP x {count} = {quest.cost * count}AP')
+            total_ap += (quest.cost * count)
+            idx += 1
+        desc_text.append(f"**Total:** {total_ap}AP")
+        embed = interactions.Embed(
+            title=f"Most AP-efficient free quests for this week's missions ({region})",
+            description="\n".join(desc_text),
+            color=0xf2aba6
+        )
 
         await ctx.send(embeds=embed)
 
