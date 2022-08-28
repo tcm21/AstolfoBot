@@ -423,7 +423,7 @@ async def find_logic(
         buff2 = type2
         type2 = ""
 
-    pages = get_skills(type, type2, flag, target, buff, buff2, trait, region)
+    pages = await asyncio.to_thread(get_skills, type, type2, flag, target, buff, buff2, trait, region)
     return pages
 
 
@@ -856,6 +856,7 @@ def main():
             url=ce.get("extraAssets").get("faces").get("equip").get("9807190"),
         )
 
+        await ctx.defer()
         result_text = roll(int(number_of_quartz), int(number_of_tickets), float(chance) / 100)
         embed.description = result_text
         await ctx.send(embeds=embed)
@@ -887,7 +888,7 @@ def main():
         skill_lookup.init_session(session)
 
         await ctx.defer()
-        np_chargers = get_np_chargers(int(amount) * 100, class_name, region)
+        np_chargers = await asyncio.to_thread(get_np_chargers, int(amount) * 100, class_name, region)
         servants_list = []
         match target:
             case "Self":
@@ -973,7 +974,7 @@ def main():
         ms.init_session(session)
         await ctx.defer()
         region = check_region(ctx.guild_id, region)
-        descs = ms.get_current_weeklies(region)
+        descs = await asyncio.to_thread(ms.get_current_weeklies, region)
         embed = interactions.Embed(
                 title=f"Current weeklies ({region})",
                 description="\n".join(descs),
@@ -982,7 +983,7 @@ def main():
 
         optimized_quests_button = interactions.Button(
             style=interactions.ButtonStyle.PRIMARY,
-            label="Also show optimized quests?",
+            label="Show optimal free quests",
             custom_id="show_optimized" if region == "JP" else "show_optimized_na",
         )
 
@@ -1020,7 +1021,7 @@ def main():
         await ctx.defer()
         import quests
         quests.init_session(session)
-        final_results = quests.get_optimized_quests(region)
+        final_results = await asyncio.to_thread(quests.get_optimized_quests, region)
         if not final_results or len(final_results) == 0:
             return
 
