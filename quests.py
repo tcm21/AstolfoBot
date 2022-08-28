@@ -21,11 +21,11 @@ def init_session(_session: CachedSession = CachedSession(expire_after=600)):
 
 class TraitSearchQuery:
     trait_id: int | list[int]
-    remain: int
+    killcount_required: int
 
-    def __init__(self, trait_id, remain):
+    def __init__(self, trait_id, killcount_required):
         self.trait_id = trait_id
-        self.remain = remain
+        self.killcount_required = killcount_required
     
     def __hash__(self):
         if isinstance(self.trait_id, list):
@@ -38,9 +38,16 @@ class TraitSearchQuery:
             return all(id in other.trait_id for id in self.trait_id)
         else:
             return self.trait_id == other.trait_id
-    
+
     def __repr__(self) -> str:
-        return f'{self.trait_id}|{self.remain}'
+        return f'{self.trait_id}|{self.killcount_required}'
+    
+    @property
+    def max_trait_id(self):
+        if isinstance(self.trait_id, list):
+            return max(self.trait_id)
+        else:
+            return self.trait_id
 
 
 class QuestEnemies:
@@ -62,22 +69,22 @@ class QuestEnemies:
 
 class QuestResult:
     id: int
-    ap_cost: int
+    cost: int
     name: str
     spot_name: str
     war_name: str
-    count_foreach_target: dict[TraitSearchQuery, int]
+    count_foreach_trait: dict[TraitSearchQuery, int]
 
     def __init__(self, id, ap_cost, name, spot_name, war_name):
         self.id = id
-        self.ap_cost = ap_cost
+        self.cost = ap_cost
         self.name = name
         self.spot_name = spot_name
         self.war_name = war_name
-        self.count_foreach_target = {}
+        self.count_foreach_trait = {}
 
     def to_str(self):
-        return f'{self.id}|{self.ap_cost}|{self.name}|{self.spot_name}|{self.war_name}'
+        return f'{self.id}|{self.cost}|{self.name}|{self.spot_name}|{self.war_name}'
 
     def __repr__(self) -> str:
         return self.to_str()
@@ -123,8 +130,8 @@ def get_quest_phase_details(quest_id: int, phase: int, region: str = "JP"):
     return nice.NiceQuestPhase.parse_obj(json.loads(response.text))
 
 
-def get_quest_details_disk(region: str = "JP"):
-    with open("test.json", encoding="utf-8") as f:
+def get_quest_details_disk(file_name: str, region: str = "JP"):
+    with open(file_name, encoding="utf-8") as f:
         all_details = json.load(f)
         return [nice.NiceQuestPhase.parse_obj(detail) for detail in all_details]
 
@@ -136,8 +143,8 @@ def remove_duplicates(list):
 def main():
     init_session()
     region = "JP"
-    if len(sys.argv) > 0:
-        region = str(sys.argv[0])
+    if len(sys.argv) > 1:
+        region = str(sys.argv[1])
     
     if region != "JP" and region != "NA":
         region = "JP"
@@ -147,14 +154,14 @@ def main():
     total_ap = 0
     for quest, count in final_results.items():
         print(quest)
-        for search_query, enemy_count in quest.count_foreach_target.items():
+        for search_query, enemy_count in quest.count_foreach_trait.items():
             if isinstance(search_query.trait_id, list):
                 trait_name = ", ".join([enums.TRAIT_NAME[id].value for id in search_query.trait_id])
             else:
                 trait_name = enums.TRAIT_NAME[search_query.trait_id].value
-            print(f"{trait_name} * {enemy_count}")
-        print(f'{quest.ap_cost}AP * {count} = {quest.ap_cost * count}AP')
-        total_ap += (quest.ap_cost * count)
+            print(f"{trait_name} * {enemy_count} * {count} = {enemy_count * count}")
+        print(f'{quest.cost}AP * {count} = {quest.cost * count}AP')
+        total_ap += (quest.cost * count)
     print(f"Total: {total_ap}AP")
 
 
@@ -176,7 +183,12 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
                         (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value or 
                         cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value)
                     ):
-                        target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
+                        new_target_trait = TraitSearchQuery(cond.detail.targetIds, cond.targetNum)
+                        existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
+                        if existing_target_trait: 
+                            existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
+                        else:
+                            target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
             master_mission_id = master_mission.id
             break
 
@@ -203,17 +215,11 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
                 quest_details.spotName,
                 quest_details.warLongName.replace("\n", ", "),
             )
-            quest_result.count_foreach_target = count_foreach_target
+            quest_result.count_foreach_trait = count_foreach_target
             final_results[quest_result] = drop.count
         return final_results
 
-    # quests = [get_free_quests(region)]
-    quests: list[basic.BasicQuestPhase] = []
-    for target_trait in target_traits:
-        quests_with_traits = get_free_quests_with_trait(target_trait, region)
-        quests.extend(quests_with_traits)
-    
-    quests = remove_duplicates(quests)
+    quests = get_free_quests(region)
 
     # Gets max phase (repeatable quest)
     quests_max_phase = [
@@ -225,9 +231,28 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
 
     quests = None
 
+    # nice_questphases = get_quest_details_disk("test.json", region)
+
+    # json_text = []
+    # for quest in nice_questphases[0:10]:
+    #     json_text.append(quest.json())
+    # with open("test_lite.json", "w", encoding="utf-8") as outfile:
+    #     outfile.write(f'[{",".join(json_text)}]')
+
+    # target_traits: list[TraitSearchQuery] = [
+    #     TraitSearchQuery(201, 15),
+    #     TraitSearchQuery(2019, 15),
+    #     TraitSearchQuery([200, 1000], 3),
+    #     TraitSearchQuery([301, 1000], 3),
+    #     TraitSearchQuery([303, 1000], 3),
+    # ]
+
     qes: list[QuestEnemies] = []
     for quest_basic in quests_max_phase:
         quest = get_quest_phase_details(quest_basic.id, quest_basic.phase, region)
+        # quest = next((nice_quest for nice_quest in nice_questphases if nice_quest.id == quest_basic.id), None)
+        if quest is None:
+            continue
         all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
         qe = QuestEnemies(quest.id, quest.consume, all_enemies, quest.name, quest.spotName, quest.warLongName)
         qes.append(qe)
@@ -248,7 +273,7 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
                         enemy_count += 1
                 if enemy_count == 0:
                     continue
-                quest_result.count_foreach_target[target] = quest_result.count_foreach_target.get(target, 0) + enemy_count
+                quest_result.count_foreach_trait[target] = quest_result.count_foreach_trait.get(target, 0) + enemy_count
                 matched = True
         if not matched:
             continue
@@ -256,17 +281,43 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
 
     qes = None
 
-    final_results: dict[QuestResult, int] = {}
-    while (any(target.remain > 0 for target in target_traits)):
-        quest_results.sort(key=lambda r: get_score(r))
-        get_final_results(target_traits, quest_results, final_results)
+    import cvxpy
+    import numpy as np
+
+    # quest_results contains the activities data (cost, number of enemies for each traits)
+    number_of_times = cvxpy.Variable(len(quest_results), integer=True)
+    energy_costs = np.array([quest_result.cost for quest_result in quest_results])
+    total_costs = energy_costs @ number_of_times
+    constraints = [number_of_times >= 0] # Number of times cannot be negative
     
-    quest_results = None
+    for target_trait in target_traits: # target_traits is kill requirements for each trait
+        enemy_count_foreach_trait = []
+        for quest_result in quest_results:
+            has_target_trait = False
+            for trait, enemy_count in quest_result.count_foreach_trait.items():
+                # count_foreach_trait is a dictionary containing [trait - enemy count for that trait] for a activity
+                if target_trait == trait:
+                    enemy_count_foreach_trait.append(enemy_count)
+                    has_target_trait = True
+                    break
+            if not has_target_trait:
+                enemy_count_foreach_trait.append(0)
+        # Add kill count requirements to constraints
+        constraints.append(enemy_count_foreach_trait @ number_of_times >= target_trait.killcount_required)
+    
+    prob = cvxpy.Problem(cvxpy.Minimize(total_costs), constraints)
+    prob.solve(solver=cvxpy.GLPK_MI)
+
+    final_results: dict[QuestResult, int] = {
+        quest_results[idx]: int(value)
+        for idx, value in enumerate(number_of_times.value)
+        if not value == 0
+    }
 
     # Insert DB
     drops: list[db.OptimizedDrop] = []
     for result, count in final_results.items():
-        for search_query, enemy_count in result.count_foreach_target.items():
+        for search_query, enemy_count in result.count_foreach_trait.items():
             drop: db.OptimizedDrop = db.OptimizedDrop(None, None, None, None, None)
             drop.master_mission_id = master_mission_id
             drop.quest_id = result.id
@@ -281,38 +332,6 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
         db.populate_drop_data(drops, region)
 
     return final_results
-
-
-def get_final_results(target_traits: list[TraitSearchQuery], quest_results: list[QuestResult], final_results: dict[QuestResult, int]):
-    for quest_result in quest_results:
-        quest_count = 0
-        remove_targets: set[TraitSearchQuery] = set()
-        while len(target_traits) > 0 and (all(target.remain > 0 for target in target_traits)):
-            for search_query, enemy_count in quest_result.count_foreach_target.items():
-                if not search_query in target_traits:
-                    continue
-                search_query.remain -= enemy_count
-                if search_query.remain <= 0:
-                    remove_targets.add(search_query)
-            quest_count += 1
-        for remove_target in remove_targets:
-            target_traits.remove(remove_target)
-
-        if quest_count > 0:
-            final_results[quest_result] = quest_count
-
-        if len(remove_targets) > 0:
-            return
-
-
-def get_score(r: QuestResult) -> float:
-    sum = 0
-    for query, count in r.count_foreach_target.items():
-        if query.remain <= 0:
-            continue
-        sum += count
-
-    return -(sum / r.ap_cost) 
 
 
 if __name__ == "__main__":
