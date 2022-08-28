@@ -1,6 +1,7 @@
 import requests_cache
 import json
 from itertools import groupby
+from text_builders import get_servant_by_id
 
 session = None
 
@@ -182,7 +183,7 @@ def get_triggering_skills(id: int, flag: str = "skill", region: str = "JP"):
     return json.loads(response.text)
 
 
-def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = "JP"):
+def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = "JP", target: str = "Self"):
     np_charge_functions = get_functions(type="gainNp", region=region)
     np_charge_functions_self = []
     np_charge_functions_exceptself = []
@@ -194,35 +195,29 @@ def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = 
         else:
             np_charge_functions_exceptself.append(function)
 
-    np_charge_skills_self = get_skills_from_functions(functions=np_charge_functions_self, flag="skill", region=region)
-    np_charge_skills_exceptself = get_skills_from_functions(functions=np_charge_functions_exceptself, flag="skill", region=region)
+    if target == "Self":
+        np_charge_skills = get_skills_from_functions(functions=np_charge_functions_self, flag="skill", region=region)
+    else:
+        np_charge_skills = get_skills_from_functions(functions=np_charge_functions_exceptself, flag="skill", region=region)
 
-    servants_self = []
-    servants_exceptself = []
-    for skill_self in np_charge_skills_self:
-        servants_self.extend(skill_self.get('reverse').get('basic').get('servant'))
-    for skill_exceptself in np_charge_skills_exceptself:
-        servants_exceptself.extend(skill_exceptself.get('reverse').get('basic').get('servant'))
+    servants = []
+    for skill in np_charge_skills:
+        servants.extend(skill.get('reverse').get('basic').get('servant'))
 
-    servants_self = [servant for servant in servants_self if servant.get("collectionNo") != 0]
-    servants_exceptself = [servant for servant in servants_exceptself if servant.get("collectionNo") != 0]
+    servants = [servant for servant in servants if servant.get("collectionNo") != 0]
 
     if class_name:
-        servants_self = [servant for servant in servants_self if servant.get("className") == class_name]
-        servants_exceptself = [servant for servant in servants_exceptself if servant.get("className") == class_name]
+        servants = [servant for servant in servants if servant.get("className") == class_name]
 
-    servants_self = remove_duplicates(servants_self)
-    servants_exceptself = remove_duplicates(servants_exceptself)
+    servants = remove_duplicates(servants)
 
-    servants_self_aoe = []
-    servants_self_st = []
-    servants_self_other = []
+    servants_aoe = []
+    servants_st = []
+    servants_other = []
 
-    all_servants = get_all_servants(region)
-
-    for servant in servants_self:
-        servant_details = next(svt for svt in all_servants if svt.get("id") == servant.get("id"))
-        total_sval = get_total_sval(servant_details, True)
+    for servant in servants:
+        servant_details = get_servant_by_id(session, servant.get("id"), region, False)
+        total_sval = get_total_sval(servant_details, (target == "Self"))
         if total_sval < sval_value:
             continue
 
@@ -232,41 +227,21 @@ def get_np_chargers(sval_value: int = 5000, class_name: str = "", region: str = 
 
         effectFlags = nps[0].get("effectFlags")
         if "attackEnemyAll" in effectFlags:
-            servants_self_aoe.append({ "totalSvals": total_sval, "details": servant_details })
+            servants_aoe.append({ "totalSvals": total_sval, "details": servant })
         elif "attackEnemyOne" in effectFlags:
-            servants_self_st.append({ "totalSvals": total_sval, "details": servant_details })
+            servants_st.append({ "totalSvals": total_sval, "details": servant })
         else:
-            servants_self_other.append({ "totalSvals": total_sval, "details": servant_details })
-
-    servants_exceptself_aoe = []
-    servants_exceptself_st = []
-    servants_exceptself_other = []
+            servants_other.append({ "totalSvals": total_sval, "details": servant })
     
-    for servant in servants_exceptself:
-        servant_details = next(svt for svt in all_servants if svt.get("id") == servant.get("id"))
-        total_sval = get_total_sval(servant_details, False)
-        if total_sval < sval_value:
-            continue
-
-        nps = servant_details.get("noblePhantasms")
-        if not nps or len(nps) == 0:
-            continue
-
-        effectFlags = nps[0].get("effectFlags")
-        if "attackEnemyAll" in effectFlags:
-            servants_exceptself_aoe.append({ "totalSvals": total_sval, "details": servant_details })
-        elif "attackEnemyOne" in effectFlags:
-            servants_exceptself_st.append({ "totalSvals": total_sval, "details": servant_details })
-        else:
-            servants_exceptself_other.append({ "totalSvals": total_sval, "details": servant_details })
+    np_charge_functions = None
+    np_charge_functions_self = None
+    np_charge_functions_exceptself = None
+    np_charge_skills = None
 
     return {
-        "selfAoe": servants_self_aoe,
-        "selfSt": servants_self_st,
-        "selfOther": servants_self_other,
-        "allyAoe": servants_exceptself_aoe,
-        "allySt": servants_exceptself_st,
-        "allyOther": servants_exceptself_other,
+        "aoe": servants_aoe,
+        "st": servants_st,
+        "other": servants_other,
     }
 
 

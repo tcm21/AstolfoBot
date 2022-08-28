@@ -890,33 +890,13 @@ def main():
         skill_lookup.init_session(session)
 
         await ctx.defer()
-        np_chargers = await asyncio.to_thread(get_np_chargers, int(amount) * 100, class_name, region)
+        np_chargers = await asyncio.to_thread(get_np_chargers, int(amount) * 100, class_name, region, target)
         servants_list = []
-        match target:
-            case "Self":
-                match np_type:
-                    case "aoe":
-                        servants_list = np_chargers.get("selfAoe")
-                    case "st":
-                        servants_list = np_chargers.get("selfSt")
-                    case "other":
-                        servants_list = np_chargers.get("selfOther")
-                    case _:
-                        servants_list.extend(np_chargers.get("selfAoe"))
-                        servants_list.extend(np_chargers.get("selfSt"))
-                        servants_list.extend(np_chargers.get("selfOther"))
-            case "Ally":
-                match np_type:
-                    case "aoe":
-                        servants_list = np_chargers.get("allyAoe")
-                    case "st":
-                        servants_list = np_chargers.get("allySt")
-                    case "other":
-                        servants_list = np_chargers.get("allyOther")
-                    case _:
-                        servants_list.extend(np_chargers.get("allyAoe"))
-                        servants_list.extend(np_chargers.get("allySt"))
-                        servants_list.extend(np_chargers.get("allyOther"))
+        match np_type:
+            case "aoe" | "st" | "other":
+                servants_list = np_chargers.get(np_type)
+            case _:
+                servants_list = [np_charger for np_charger_list in np_chargers.values() for np_charger in np_charger_list]
                         
         if len(servants_list) == 0:
             await ctx.send("Not found.", ephemeral=True)
