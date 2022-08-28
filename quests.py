@@ -125,6 +125,8 @@ def get_quest_details(quest_id: int, region: str = "JP"):
 
 
 def get_quest_phase_details(quest_id: int, phase: int, region: str = "JP"):
+    if region != "JP" and region != "NA":
+        region = "JP" # Regions except JP and NA doesn't have enemy data
     url = f"https://api.atlasacademy.io/nice/{region}/quest/{quest_id}/{phase}?lang=en"
     response = session.get(url)
     return nice.NiceQuestPhase.parse_obj(json.loads(response.text))
