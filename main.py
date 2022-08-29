@@ -1004,7 +1004,7 @@ def main():
         await ctx.defer()
         import quests
         quests.init_session(session)
-        final_results = await asyncio.to_thread(quests.get_optimized_quests, region)
+        final_results = await quests.get_optimized_quests(region)
         if not final_results or len(final_results) == 0:
             return
 

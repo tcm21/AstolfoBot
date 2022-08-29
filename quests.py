@@ -6,6 +6,7 @@ import json
 import time
 import datetime
 import sys
+import asyncio
 
 import fgo_api_types.nice as nice
 import fgo_api_types.basic as basic
@@ -50,23 +51,6 @@ class TraitSearchQuery:
             return self.trait_id
 
 
-class QuestEnemies:
-    id: int
-    ap_cost: int
-    enemies: list[nice.QuestEnemy]
-    name: str
-    spot_name: str
-    war_name: str
-
-    def __init__(self, id, ap_cost, enemies, name, spot_name, war_name):
-        self.id = id
-        self.ap_cost = ap_cost
-        self.enemies = enemies
-        self.name = name
-        self.spot_name = spot_name
-        self.war_name = war_name.replace("\n", ", ")
-
-
 class QuestResult:
     id: int
     cost: int
@@ -80,7 +64,7 @@ class QuestResult:
         self.cost = ap_cost
         self.name = name
         self.spot_name = spot_name
-        self.war_name = war_name
+        self.war_name = war_name.replace("\n", ", ")
         self.count_foreach_trait = {}
 
     def to_str(self):
@@ -142,7 +126,7 @@ def remove_duplicates(list):
     return [i for n, i in enumerate(list) if i not in list[n + 1:]]
 
 
-def main():
+async def main():
     init_session()
     region = "JP"
     if len(sys.argv) > 1:
@@ -151,7 +135,7 @@ def main():
     if region != "JP" and region != "NA":
         region = "JP"
 
-    final_results = get_optimized_quests(region=region)
+    final_results = await get_optimized_quests(region=region, load_from_disk=True)
 
     total_ap = 0
     for quest, count in final_results.items():
@@ -167,7 +151,7 @@ def main():
     print(f"Total: {total_ap}AP")
 
 
-def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
+async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False) -> dict[QuestResult, int]:
     master_mission_id: int
     target_traits: list[TraitSearchQuery] = []
     import missions
@@ -233,7 +217,9 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
 
     quests = None
 
-    # nice_questphases = get_quest_details_disk("test.json", region)
+    nice_questphases = None
+    if load_from_disk:
+        nice_questphases = get_quest_details_disk("test.json", region)
 
     # json_text = []
     # for quest in nice_questphases[0:10]:
@@ -249,39 +235,12 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
     #     TraitSearchQuery([303, 1000], 3),
     # ]
 
-    qes: list[QuestEnemies] = []
-    for quest_basic in quests_max_phase:
-        quest = get_quest_phase_details(quest_basic.id, quest_basic.phase, region)
-        # quest = next((nice_quest for nice_quest in nice_questphases if nice_quest.id == quest_basic.id), None)
-        if quest is None:
-            continue
-        all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
-        qe = QuestEnemies(quest.id, quest.consume, all_enemies, quest.name, quest.spotName, quest.warLongName)
-        qes.append(qe)
-
     quest_results: list[QuestResult] = []
-    for q in qes:
-        quest_result = QuestResult(q.id, q.ap_cost, q.name, q.spot_name, q.war_name)
-        matched = False
-        for enemy in q.enemies:
-            for target in target_traits:
-                enemy_count = 0
-                target_trait_id = target.trait_id
-                if isinstance(target_trait_id, list):
-                    if all(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
-                        enemy_count += 1
-                else:
-                    if target_trait_id in [enemy_trait.id for enemy_trait in enemy.traits]:
-                        enemy_count += 1
-                if enemy_count == 0:
-                    continue
-                quest_result.count_foreach_trait[target] = quest_result.count_foreach_trait.get(target, 0) + enemy_count
-                matched = True
-        if not matched:
-            continue
-        quest_results.append(quest_result)
+    request_list = []
+    for quest_basic in quests_max_phase:
+        request_list.append(asyncio.to_thread(create_quest_result, quest_basic, load_from_disk, nice_questphases, region, target_traits, quest_results))
 
-    qes = None
+    await asyncio.gather(*request_list)
 
     import cvxpy
     import numpy as np
@@ -336,8 +295,44 @@ def get_optimized_quests(region: str = "JP") -> dict[QuestResult, int]:
     return final_results
 
 
+def create_quest_result(
+    quest_basic: basic.BasicQuestPhase,
+    load_from_disk: bool,
+    nice_questphases: list[nice.NiceQuestPhase],
+    region: str,
+    target_traits: list[TraitSearchQuery],
+    quest_results: list[QuestResult],
+):
+    if load_from_disk:
+        quest = next((nice_quest for nice_quest in nice_questphases if nice_quest.id == quest_basic.id), None)
+    else:
+        quest = get_quest_phase_details(quest_basic.id, quest_basic.phase, region)
+    if quest is None:
+        return
+    all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
+    quest_result = QuestResult(quest.id, quest.consume, quest.name, quest.spotName, quest.warLongName)
+    matched = False
+    for enemy in all_enemies:
+        for target in target_traits:
+            enemy_count = 0
+            target_trait_id = target.trait_id
+            if isinstance(target_trait_id, list):
+                if all(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
+                    enemy_count += 1
+            else:
+                if target_trait_id in [enemy_trait.id for enemy_trait in enemy.traits]:
+                    enemy_count += 1
+            if enemy_count == 0:
+                continue
+            quest_result.count_foreach_trait[target] = quest_result.count_foreach_trait.get(target, 0) + enemy_count
+            matched = True
+    if not matched:
+        return
+    quest_results.append(quest_result)
+
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 
 
 def init_data_from_api():
