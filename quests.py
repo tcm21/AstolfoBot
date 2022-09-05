@@ -23,10 +23,12 @@ def init_session(_session: CachedSession = CachedSession(expire_after=600)):
 class TraitSearchQuery:
     trait_id: int | list[int]
     killcount_required: int
+    is_or: bool
 
-    def __init__(self, trait_id, killcount_required):
+    def __init__(self, trait_id, killcount_required, is_or):
         self.trait_id = trait_id
         self.killcount_required = killcount_required
+        self.is_or = is_or
     
     def __hash__(self):
         if isinstance(self.trait_id, list):
@@ -36,9 +38,9 @@ class TraitSearchQuery:
     
     def __eq__(self, other):
         if isinstance(self.trait_id, list) and isinstance(other.trait_id, list):
-            return all(id in other.trait_id for id in self.trait_id)
+            return all(id in other.trait_id for id in self.trait_id) and self.is_or == other.is_or
         else:
-            return self.trait_id == other.trait_id
+            return self.trait_id == other.trait_id and self.is_or == other.is_or
 
     def __repr__(self) -> str:
         return f'{self.trait_id}|{self.killcount_required}'
@@ -151,6 +153,24 @@ async def main():
     print(f"Total: {total_ap}AP")
 
 
+# Class ID => Trait ID
+CLASS_TRAIT_MAP: dict[int, int] = {
+    1: 100, # enums.Trait.classSaber
+    2: 102, # enums.Trait.classArcher,
+    3: 101, # enums.Trait.classLancer,
+    4: 103, # enums.Trait.classRider,
+    5: 104, # enums.Trait.classCaster,
+    6: 105, # enums.Trait.classAssassin,
+    7: 106, # enums.Trait.classBerserker,
+    8: 107, # enums.Trait.classShielder,
+    9: 108, # enums.Trait.classRuler,
+    10: 109, # enums.Trait.classAlterEgo,
+    11: 110, # enums.Trait.classAvenger,
+    25: 117, # enums.Trait.classForeigner,
+    28: 120, # enums.Trait.classPretender,
+}
+
+
 async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False) -> dict[QuestResult, int]:
     master_mission_id: int
     target_traits: list[TraitSearchQuery] = []
@@ -165,16 +185,24 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
         if delta.days == 6: # Weekly
             for mission in master_mission.missions:
                 for cond in mission.conds:
-                    if (cond.detail and
-                        (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value or 
-                        cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value)
-                    ):
-                        new_target_trait = TraitSearchQuery(cond.detail.targetIds, cond.targetNum)
-                        existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
-                        if existing_target_trait: 
-                            existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
-                        else:
-                            target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum))
+                    if cond.detail:
+                        if (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value or 
+                            cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value):
+                            new_target_trait = TraitSearchQuery(cond.detail.targetIds, cond.targetNum, False)
+                            existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
+                            if existing_target_trait: 
+                                existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
+                            else:
+                                target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum, False))
+                        elif (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value or 
+                            cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value):
+                            targetids = [CLASS_TRAIT_MAP[targetid] for targetid in cond.detail.targetIds]
+                            new_target_trait = TraitSearchQuery(targetids, cond.targetNum, True)
+                            existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
+                            if existing_target_trait: 
+                                existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
+                            else:
+                                target_traits.append(TraitSearchQuery(targetids, cond.targetNum, True))
             master_mission_id = master_mission.id
             break
 
@@ -192,7 +220,7 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
                 else:
                     target_id = int(drop.target_id)
 
-                search_query = TraitSearchQuery(target_id, 0)
+                search_query = TraitSearchQuery(target_id, 0, drop.is_or)
                 count_foreach_target[search_query] = drop.target_count
             quest_result = QuestResult(
                 q_id,
@@ -236,11 +264,8 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
     # ]
 
     quest_results: list[QuestResult] = []
-    request_list = []
     for quest_basic in quests_max_phase:
-        request_list.append(asyncio.to_thread(create_quest_result, quest_basic, load_from_disk, nice_questphases, region, target_traits, quest_results))
-
-    await asyncio.gather(*request_list)
+        await asyncio.to_thread(create_quest_result, quest_basic, load_from_disk, nice_questphases, region, target_traits, quest_results)
 
     import cvxpy
     import numpy as np
@@ -279,7 +304,7 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
     drops: list[db.OptimizedDrop] = []
     for result, count in final_results.items():
         for search_query, enemy_count in result.count_foreach_trait.items():
-            drop: db.OptimizedDrop = db.OptimizedDrop(None, None, None, None, None)
+            drop: db.OptimizedDrop = db.OptimizedDrop(None, None, None, None, None, False)
             drop.master_mission_id = master_mission_id
             drop.quest_id = result.id
             if isinstance(search_query.trait_id, list):
@@ -288,6 +313,7 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
                 drop.target_id = search_query.trait_id
             drop.target_count = enemy_count
             drop.count = count
+            drop.is_or = search_query.is_or
             drops.append(drop)
     if len(drops) > 0:
         db.populate_drop_data(drops, region)
@@ -317,14 +343,19 @@ def create_quest_result(
             enemy_count = 0
             target_trait_id = target.trait_id
             if isinstance(target_trait_id, list):
-                if all(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
-                    enemy_count += 1
+                if target.is_or:
+                    if any(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
+                        enemy_count += 1
+                else:
+                    if all(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
+                        enemy_count += 1
             else:
                 if target_trait_id in [enemy_trait.id for enemy_trait in enemy.traits]:
                     enemy_count += 1
             if enemy_count == 0:
                 continue
             quest_result.count_foreach_trait[target] = quest_result.count_foreach_trait.get(target, 0) + enemy_count
+                
             matched = True
     if not matched:
         return

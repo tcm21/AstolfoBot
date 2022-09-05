@@ -1016,7 +1016,10 @@ def main():
             desc_text.append(f'**{idx + 1}: [{quest.name}](https://apps.atlasacademy.io/db/JP/quest/{quest.id}/3) - {quest.spot_name} - {quest.war_name} x {count}**')
             for search_query, enemy_count in quest.count_foreach_trait.items():
                 if isinstance(search_query.trait_id, list):
-                    trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
+                    if search_query.is_or:
+                        trait_name = " or ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
+                    else:
+                        trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
                 else:
                     trait_name = title_case(enums.TRAIT_NAME[search_query.trait_id].value)
                 desc_text.append(f"{trait_name} x {enemy_count}")

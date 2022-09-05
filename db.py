@@ -46,6 +46,7 @@ def init_optimized_quests_db():
                 target_count bigint NOT NULL,
                 region character varying(2),
                 "count" bigint NOT NULL,
+                is_or boolean NOT NULL DEFAULT false,
                 CONSTRAINT optimized_quests_pkey PRIMARY KEY (master_mission_id, quest_id, target_id)
             )
             """)
@@ -57,13 +58,15 @@ class OptimizedDrop:
     target_id: str
     target_count: int
     count: int
+    is_or: bool
 
-    def __init__(self, master_mission_id, quest_id, target_id, target_count, count):
+    def __init__(self, master_mission_id, quest_id, target_id, target_count, count, is_or):
         self.master_mission_id = master_mission_id
         self.quest_id = quest_id
         self.target_id = target_id
         self.target_count = target_count
         self.count = count
+        self.is_or = is_or
 
 
 def populate_drop_data(drops: list[OptimizedDrop], region: str = "JP"):
@@ -71,11 +74,11 @@ def populate_drop_data(drops: list[OptimizedDrop], region: str = "JP"):
         cur = conn.cursor()
         sql = f"DELETE FROM optimized_quests WHERE region='{region}';"
         cur.execute(sql)
-        sql = "INSERT INTO optimized_quests(master_mission_id, quest_id, target_id, target_count, count, region) VALUES %s"
+        sql = "INSERT INTO optimized_quests(master_mission_id, quest_id, target_id, target_count, count, is_or, region) VALUES %s"
         execute_values(
             cur,
             sql,
-            [(drop.master_mission_id, drop.quest_id, drop.target_id, drop.target_count, drop.count, region) for drop in drops]
+            [(drop.master_mission_id, drop.quest_id, drop.target_id, drop.target_count, drop.count, drop.is_or, region) for drop in drops]
         )
         conn.commit()
 
@@ -83,7 +86,7 @@ def populate_drop_data(drops: list[OptimizedDrop], region: str = "JP"):
 def get_drop_data(master_mission_id: int, region: str = "JP"):
     with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
         cur = conn.cursor()
-        cur.execute(f'SELECT master_mission_id, quest_id, target_id, target_count, count FROM optimized_quests WHERE master_mission_id = {master_mission_id} and region = \'{region}\' ORDER BY quest_id')
+        cur.execute(f'SELECT master_mission_id, quest_id, target_id, target_count, count, is_or FROM optimized_quests WHERE master_mission_id = {master_mission_id} and region = \'{region}\' ORDER BY quest_id')
         if cur.rowcount > 0:
-            return [OptimizedDrop(row[0], row[1], row[2], row[3], row[4]) for row in cur.fetchall()]
+            return [OptimizedDrop(row[0], row[1], row[2], row[3], row[4], row[5]) for row in cur.fetchall()]
         return None
