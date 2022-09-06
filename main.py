@@ -997,6 +997,7 @@ def main():
 
 
     async def get_optimal_quests(ctx: interactions.ComponentContext, region: str):
+        await ctx.message.edit(content=None, components=None, embeds=ctx.message.embeds)
         await ctx.defer()
         import quests
         quests.init_session(session)

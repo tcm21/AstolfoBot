@@ -57,7 +57,7 @@ class TraitSearchQuery:
             else:
                 trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in self.trait_id])
         else:
-            trait_name = enums.TRAIT_NAME[self.trait_id].value
+            trait_name = title_case(enums.TRAIT_NAME[self.trait_id].value)
         return trait_name
     
     @property
