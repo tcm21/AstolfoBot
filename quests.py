@@ -12,6 +12,8 @@ import fgo_api_types.nice as nice
 import fgo_api_types.basic as basic
 import fgo_api_types.enums as enums
 
+import db
+
 session = None
 
 def init_session(_session: CachedSession = CachedSession(expire_after=600)):
@@ -136,8 +138,10 @@ async def main():
     
     if region != "JP" and region != "NA":
         region = "JP"
+    
+    # copy_data_to_db(region)
 
-    final_results = await get_optimized_quests(region=region, load_from_disk=True)
+    final_results = await get_optimized_quests(region=region, load_from_disk=False)
 
     total_ap = 0
     for quest, count in final_results.items():
@@ -206,7 +210,6 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
             master_mission_id = master_mission.id
             break
 
-    import db
     db.init_optimized_quests_db()
     drop_data: list[db.OptimizedQuest] = db.get_optimized_quests(master_mission_id, region)
     if drop_data and len(drop_data) > 0:
@@ -245,9 +248,8 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
 
     quests = None
 
-    nice_questphases = None
     if load_from_disk:
-        nice_questphases = get_quest_details_disk("test.json", region)
+        copy_data_to_db()
 
     # json_text = []
     # for quest in nice_questphases[0:10]:
@@ -265,7 +267,7 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
 
     quest_results: list[QuestResult] = []
     for quest_basic in quests_max_phase:
-        await asyncio.to_thread(create_quest_result, quest_basic, load_from_disk, nice_questphases, region, target_traits, quest_results)
+        await asyncio.to_thread(create_quest_result, quest_basic, target_traits, quest_results)
 
     import cvxpy
     import numpy as np
@@ -322,36 +324,29 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
 
 
 def create_quest_result(
-    quest_basic: basic.BasicQuestPhase,
-    load_from_disk: bool,
-    nice_questphases: list[nice.NiceQuestPhase],
-    region: str,
+    quest: basic.BasicQuestPhase,
     target_traits: list[TraitSearchQuery],
     quest_results: list[QuestResult],
 ):
-    if load_from_disk:
-        quest = next((nice_quest for nice_quest in nice_questphases if nice_quest.id == quest_basic.id), None)
-    else:
-        quest = get_quest_phase_details(quest_basic.id, quest_basic.phase, region)
-    if quest is None:
+    quest_enemies = db.get_quest_enemies(quest.id)
+    if quest_enemies is None or len(quest_enemies) == 0:
         return
-    all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
     quest_result = QuestResult(quest.id, quest.consume, quest.name, quest.spotName, quest.warLongName)
     matched = False
-    for enemy in all_enemies:
+    for enemy in quest_enemies:
         for target in target_traits:
             enemy_count = 0
             target_trait_id = target.trait_id
             if isinstance(target_trait_id, list):
                 if target.is_or:
-                    if any(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
-                        enemy_count += 1
+                    if any(target_id in [trait_id for trait_id in enemy.traits] for target_id in target_trait_id):
+                        enemy_count += enemy.count
                 else:
-                    if all(target_id in [enemy_trait.id for enemy_trait in enemy.traits] for target_id in target_trait_id):
-                        enemy_count += 1
+                    if all(target_id in [trait_id for trait_id in enemy.traits] for target_id in target_trait_id):
+                        enemy_count += enemy.count
             else:
-                if target_trait_id in [enemy_trait.id for enemy_trait in enemy.traits]:
-                    enemy_count += 1
+                if target_trait_id in [trait_id for trait_id in enemy.traits]:
+                    enemy_count += enemy.count
             if enemy_count == 0:
                 continue
             quest_result.count_foreach_trait[target] = quest_result.count_foreach_trait.get(target, 0) + enemy_count
@@ -360,10 +355,6 @@ def create_quest_result(
     if not matched:
         return
     quest_results.append(quest_result)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 
 def init_data_from_api():
@@ -383,4 +374,14 @@ def init_data_from_api():
         json_text.append(quest.json())
     with open("data.json", "w", encoding="utf-8") as outfile:
         outfile.write(f'[{",".join(json_text)}]')
-    
+
+
+def copy_data_to_db(region: str = "JP"):
+    nice_questphases = get_quest_details_disk("test.json", region)
+    for quest in nice_questphases:
+        all_enemies = [enemy for stage in quest.stages for enemy in stage.enemies]
+        db.insert_quest_enemies(quest.id, all_enemies)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

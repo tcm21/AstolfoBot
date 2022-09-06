@@ -32,7 +32,7 @@ def new_presence() -> interactions.ClientPresence:
         activities=[
             {
                 "name": "/help",
-                "type": 2,
+                "type": interactions.PresenceActivityType.LISTENING.value,
             },
         ],
         status="online",
