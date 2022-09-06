@@ -1,5 +1,4 @@
 
-from doctest import master
 from requests_cache import CachedSession
 from itertools import groupby
 import json
@@ -13,6 +12,7 @@ import fgo_api_types.basic as basic
 import fgo_api_types.enums as enums
 
 import db
+from text_builders import title_case
 
 session = None
 
@@ -46,6 +46,19 @@ class TraitSearchQuery:
 
     def __repr__(self) -> str:
         return f'{self.trait_id}|{self.killcount_required}'
+
+    def __str__(self) -> str:
+        if isinstance(self.trait_id, list):
+            if self.is_or:
+                if NON_SERVANT_TRAIT_ID in self.trait_id:
+                    trait_name = f'{" or ".join([title_case(enums.TRAIT_NAME[id].value) for id in filter(lambda i: i != NON_SERVANT_TRAIT_ID, self.trait_id)])} (Not servant)'
+                else:
+                    trait_name = " or ".join([title_case(enums.TRAIT_NAME[id].value) for id in self.trait_id])
+            else:
+                trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in self.trait_id])
+        else:
+            trait_name = enums.TRAIT_NAME[self.trait_id].value
+        return trait_name
     
     @property
     def max_trait_id(self):
@@ -174,6 +187,8 @@ CLASS_TRAIT_MAP: dict[int, int] = {
     28: 120, # enums.Trait.classPretender,
 }
 
+NON_SERVANT_TRAIT_ID: int = 5010
+
 
 async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False) -> dict[QuestResult, int]:
     master_mission_id: int
@@ -197,16 +212,19 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
                             if existing_target_trait: 
                                 existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
                             else:
-                                target_traits.append(TraitSearchQuery(cond.detail.targetIds, cond.targetNum, False))
+                                target_traits.append(new_target_trait)
                         elif (cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value or 
-                            cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value):
+                            cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value or 
+                            cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value):
                             targetids = [CLASS_TRAIT_MAP[targetid] for targetid in cond.detail.targetIds]
+                            if cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value:
+                                targetids.append(NON_SERVANT_TRAIT_ID)
                             new_target_trait = TraitSearchQuery(targetids, cond.targetNum, True)
                             existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
                             if existing_target_trait: 
                                 existing_target_trait.killcount_required += (cond.targetNum - existing_target_trait.killcount_required)
                             else:
-                                target_traits.append(TraitSearchQuery(targetids, cond.targetNum, True))
+                                target_traits.append(new_target_trait)
             master_mission_id = master_mission.id
             break
 
@@ -268,6 +286,9 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
     quest_results: list[QuestResult] = []
     for quest_basic in quests_max_phase:
         await asyncio.to_thread(create_quest_result, quest_basic, target_traits, quest_results)
+
+    if len(quest_results) == 0:
+        return None
 
     import cvxpy
     import numpy as np
@@ -339,13 +360,22 @@ def create_quest_result(
             target_trait_id = target.trait_id
             if isinstance(target_trait_id, list):
                 if target.is_or:
-                    if any(target_id in [trait_id for trait_id in enemy.traits] for target_id in target_trait_id):
+                    if (
+                        NON_SERVANT_TRAIT_ID in target_trait_id and
+                        any(target_id in enemy.traits for target_id in filter(lambda id: id != NON_SERVANT_TRAIT_ID, target_trait_id)) and
+                        NON_SERVANT_TRAIT_ID in enemy.traits
+                    ):
+                        enemy_count += enemy.count
+                    elif (
+                        NON_SERVANT_TRAIT_ID not in target_trait_id and
+                        any(target_id in enemy.traits for target_id in target_trait_id)
+                    ):
                         enemy_count += enemy.count
                 else:
-                    if all(target_id in [trait_id for trait_id in enemy.traits] for target_id in target_trait_id):
+                    if all(target_id in enemy.traits for target_id in target_trait_id):
                         enemy_count += enemy.count
             else:
-                if target_trait_id in [trait_id for trait_id in enemy.traits]:
+                if target_trait_id in enemy.traits:
                     enemy_count += enemy.count
             if enemy_count == 0:
                 continue

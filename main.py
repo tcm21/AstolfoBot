@@ -11,6 +11,7 @@ from interactions.ext.tasks import IntervalTrigger, create_task
 from interactions.ext.wait_for import setup, wait_for_component
 from interactions.ext.persistence import PersistentCustomID
 from gacha_calc import roll
+from quests import TraitSearchQuery
 
 from text_builders import get_skill_description, title_case, get_enums, get_traits, func_desc_dict, buff_desc_dict, target_desc_dict, get_servant_by_id, remove_zeros_decimal
 import skill_lookup
@@ -1001,6 +1002,7 @@ def main():
         quests.init_session(session)
         final_results = await quests.get_optimized_quests(region)
         if not final_results or len(final_results) == 0:
+            await ctx.send("Not found.", ephemeral=True)
             return
 
         desc_text = []
@@ -1010,14 +1012,7 @@ def main():
         for quest, count in final_results.items():
             desc_text.append(f'**{idx + 1}: [{quest.name}](https://apps.atlasacademy.io/db/JP/quest/{quest.id}/3) - {quest.spot_name} - {quest.war_name} x {count}**')
             for search_query, enemy_count in quest.count_foreach_trait.items():
-                if isinstance(search_query.trait_id, list):
-                    if search_query.is_or:
-                        trait_name = " or ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
-                    else:
-                        trait_name = ", ".join([title_case(enums.TRAIT_NAME[id].value) for id in search_query.trait_id])
-                else:
-                    trait_name = title_case(enums.TRAIT_NAME[search_query.trait_id].value)
-                desc_text.append(f"{trait_name} x {enemy_count}")
+                desc_text.append(f"{str(search_query)} x {enemy_count}")
             desc_text.append(f'{quest.cost}AP x {count} = {quest.cost * count}AP')
             total_ap += (quest.cost * count)
             idx += 1
