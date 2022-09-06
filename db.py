@@ -11,20 +11,20 @@ if not DATABASE_URL:
 
 
 def init_region_db():
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         cur.execute('CREATE TABLE IF NOT EXISTS regions(guild_id BIGINT PRIMARY KEY, region VARCHAR(2))')
 
 
 def set_region(guild_id: int, region: str):
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         cur.execute(f'INSERT INTO regions(guild_id, region) values({guild_id}, \'{region}\') ON CONFLICT (guild_id) DO UPDATE SET region=\'{region}\'')
         conn.commit()
 
 
 def get_region(guild_id: int):
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         cur.execute(f'SELECT region FROM regions WHERE guild_id = {guild_id}')
         row = cur.fetchone()
@@ -34,7 +34,7 @@ def get_region(guild_id: int):
 
 
 def init_optimized_quests_db():
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         cur.execute(
             """
@@ -52,7 +52,7 @@ def init_optimized_quests_db():
             """)
 
 
-class OptimizedDrop:
+class OptimizedQuest:
     master_mission_id: int
     quest_id: int
     target_id: str
@@ -69,8 +69,8 @@ class OptimizedDrop:
         self.is_or = is_or
 
 
-def populate_drop_data(drops: list[OptimizedDrop], region: str = "JP"):
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+def insert_optimized_quests(drops: list[OptimizedQuest], region: str = "JP"):
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         sql = f"DELETE FROM optimized_quests WHERE region='{region}';"
         cur.execute(sql)
@@ -83,10 +83,10 @@ def populate_drop_data(drops: list[OptimizedDrop], region: str = "JP"):
         conn.commit()
 
 
-def get_drop_data(master_mission_id: int, region: str = "JP"):
-    with psycopg2.connect(DATABASE_URL, sslmode="require") as conn:
+def get_optimized_quests(master_mission_id: int, region: str = "JP"):
+    with psycopg2.connect(DATABASE_URL) as conn:
         cur = conn.cursor()
         cur.execute(f'SELECT master_mission_id, quest_id, target_id, target_count, count, is_or FROM optimized_quests WHERE master_mission_id = {master_mission_id} and region = \'{region}\' ORDER BY quest_id')
         if cur.rowcount > 0:
-            return [OptimizedDrop(row[0], row[1], row[2], row[3], row[4], row[5]) for row in cur.fetchall()]
+            return [OptimizedQuest(row[0], row[1], row[2], row[3], row[4], row[5]) for row in cur.fetchall()]
         return None

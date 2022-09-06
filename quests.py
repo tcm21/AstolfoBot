@@ -208,20 +208,20 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
 
     import db
     db.init_optimized_quests_db()
-    drop_data: list[db.OptimizedDrop] = db.get_drop_data(master_mission_id, region)
+    drop_data: list[db.OptimizedQuest] = db.get_optimized_quests(master_mission_id, region)
     if drop_data and len(drop_data) > 0:
         final_results: dict[QuestResult, int] = {}
         for q_id, quest_group in groupby(drop_data, lambda x: x.quest_id):
             count_foreach_target: dict[TraitSearchQuery, int] = {}
             quest_details = get_quest_details(q_id, region)
-            for drop in quest_group:
-                if "," in drop.target_id:
-                    target_id = [int(id) for id in drop.target_id.split(",")]
+            for optimized_quest in quest_group:
+                if "," in optimized_quest.target_id:
+                    target_id = [int(id) for id in optimized_quest.target_id.split(",")]
                 else:
-                    target_id = int(drop.target_id)
+                    target_id = int(optimized_quest.target_id)
 
-                search_query = TraitSearchQuery(target_id, 0, drop.is_or)
-                count_foreach_target[search_query] = drop.target_count
+                search_query = TraitSearchQuery(target_id, 0, optimized_quest.is_or)
+                count_foreach_target[search_query] = optimized_quest.target_count
             quest_result = QuestResult(
                 q_id,
                 quest_details.consume,
@@ -230,7 +230,7 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
                 quest_details.warLongName.replace("\n", ", "),
             )
             quest_result.count_foreach_trait = count_foreach_target
-            final_results[quest_result] = drop.count
+            final_results[quest_result] = optimized_quest.count
         return final_results
 
     quests = get_free_quests(region)
@@ -301,22 +301,22 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
     }
 
     # Insert DB
-    drops: list[db.OptimizedDrop] = []
+    optimized_quests: list[db.OptimizedQuest] = []
     for result, count in final_results.items():
         for search_query, enemy_count in result.count_foreach_trait.items():
-            drop: db.OptimizedDrop = db.OptimizedDrop(None, None, None, None, None, False)
-            drop.master_mission_id = master_mission_id
-            drop.quest_id = result.id
+            optimized_quest: db.OptimizedQuest = db.OptimizedQuest(None, None, None, None, None, False)
+            optimized_quest.master_mission_id = master_mission_id
+            optimized_quest.quest_id = result.id
             if isinstance(search_query.trait_id, list):
-                drop.target_id = ",".join([str(id) for id in search_query.trait_id])
+                optimized_quest.target_id = ",".join([str(id) for id in search_query.trait_id])
             else:
-                drop.target_id = search_query.trait_id
-            drop.target_count = enemy_count
-            drop.count = count
-            drop.is_or = search_query.is_or
-            drops.append(drop)
-    if len(drops) > 0:
-        db.populate_drop_data(drops, region)
+                optimized_quest.target_id = search_query.trait_id
+            optimized_quest.target_count = enemy_count
+            optimized_quest.count = count
+            optimized_quest.is_or = search_query.is_or
+            optimized_quests.append(optimized_quest)
+    if len(optimized_quests) > 0:
+        db.insert_optimized_quests(optimized_quests, region)
 
     return final_results
 

@@ -20,24 +20,19 @@ import fgo_api_types.nice as nice
 import fgo_api_types.enums as enums
 
 
-commands = ["/servant", "/missions", "/drops", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
-currentCmdIdx = 0
+# commands = ["/servant", "/missions", "/drops", "/np-chargers", "/search skill", "/search np", "/search skill-or-np", "/support", "/gacha"]
+# currentCmdIdx = 0
 
 session = requests_cache.CachedSession(expire_after=600)
 bot: interactions.Client = None
 
 
 def new_presence() -> interactions.ClientPresence:
-    global currentCmdIdx
-    commandText = commands[currentCmdIdx]
-    currentCmdIdx += 1
-    if currentCmdIdx == len(commands):
-        currentCmdIdx = 0
     return interactions.ClientPresence(
         activities=[
             {
-                "name": commandText,
-                "type": 0,
+                "name": "/help",
+                "type": 2,
             },
         ],
         status="online",
@@ -1065,6 +1060,27 @@ def main():
         embed.set_thumbnail(item_details.icon)
         await ctx.send(embeds=embed)
 
+    
+    @bot.command(
+        description="Get help on available commands"
+    )
+    async def help(
+        ctx: interactions.CommandContext,
+    ):
+        embed = interactions.Embed(
+            title=f"Available commands",
+            color=0xf2aba6
+        )
+
+        embed.add_field("/servant", "Gets servant info")
+        embed.add_field("/missions", "Gets current weekly missions. Also shows the most optimal way to complete them (Free quests only).")
+        embed.add_field("/drops", "Finds drop location for materials")
+        embed.add_field("/np-chargers", "Lists the NP chargers for each region")
+        embed.add_field("/search", "Search for a skill or NP that meets the criteria")
+        embed.add_field("/gacha", "See how likely you'll get a servant based on the number of quartz/tickets")
+        embed.add_field("/support", "Show a player's support list")
+        await ctx.send(embeds=embed)
+
 
     @bot.autocomplete(command="servant", name="cv")
     async def autocomplete_choice_list(ctx: interactions.CommandContext, cv: str = ""):
@@ -1136,14 +1152,14 @@ def main():
         await ctx.populate(populate_items(item))
 
 
-    @bot.event
-    async def on_start():
-        status_task.start()
+    # @bot.event
+    # async def on_start():
+    #     status_task.start()
 
 
-    @create_task(IntervalTrigger(600))
-    async def status_task():
-        await bot.change_presence(new_presence())
+    # @create_task(IntervalTrigger(600))
+    # async def status_task():
+    #     await bot.change_presence(new_presence())
 
     bot.start()
 
