@@ -409,7 +409,7 @@ async def find_logic(
         await ctx.send(content="Invalid input.", ephemeral=True)
         return []
     
-    region = check_region(ctx.guild_id, region)
+    region = await asyncio.to_thread(check_region, ctx.guild_id, region)
 
     buff = ""
     buff2 = ""
@@ -627,7 +627,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        region = check_region(ctx.guild_id, region)
+        region = await asyncio.to_thread(check_region, ctx.guild_id, region)
 
         await ctx.defer()
         servants = get_servant(servantName, cv, className, region)
@@ -777,7 +777,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        region = check_region(ctx.guild_id, region)
+        region = await asyncio.to_thread(check_region, ctx.guild_id, region)
 
         await ctx.defer()
         friend_code = friend_code.replace(",","")
@@ -881,7 +881,7 @@ def main():
             await ctx.send(content="Invalid input.", ephemeral=True)
             return
 
-        region = check_region(ctx.guild_id, region)
+        region = await asyncio.to_thread(check_region, ctx.guild_id, region)
 
         skill_lookup.init_session(session)
 
@@ -951,7 +951,7 @@ def main():
     ):
         ms.init_session(session)
         await ctx.defer()
-        region = check_region(ctx.guild_id, region)
+        region = await asyncio.to_thread(check_region, ctx.guild_id, region)
         descs = await asyncio.to_thread(ms.get_current_weeklies, region)
         embed = interactions.Embed(
                 title=f"Current weeklies ({region})",
@@ -1038,7 +1038,7 @@ def main():
         region: str = "",
     ):
         await ctx.defer()
-        region = check_region(ctx.guild_id, region)
+        region = await asyncio.to_thread(check_region, ctx.guild_id, region)
         item_details = next(nice_item for nice_item in get_item_list() if str(nice_item.id) == item)
 
         from drops import get_drop_rates
