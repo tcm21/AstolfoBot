@@ -953,9 +953,12 @@ def main():
         await ctx.defer()
         region = await asyncio.to_thread(check_region, ctx.guild_id, region)
         descs = await asyncio.to_thread(ms.get_current_weeklies, region)
+        desc = "\n".join(descs)
+        if len(desc) > 4096:
+            desc = desc[0:4096]
         embed = interactions.Embed(
                 title=f"Current weeklies ({region})",
-                description="\n".join(descs),
+                description=desc,
                 color=0xf2aba6
             )
 

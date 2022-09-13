@@ -71,6 +71,7 @@ def get_current_weeklies(region: str = "JP"):
                     result.append('')
                 result.append(f'**Mission {idx + 1}:**')
                 result.extend(desc)
+            break
 
     return result
 
@@ -120,9 +121,9 @@ def describe_missions(mission: nice.NiceEventMission, region: str = "JP"):
                 case enums.DetailMissionCondType.ITEM_GET_BATTLE.value | enums.DetailMissionCondType.ITEM_GET_TOTAL.value:
                     items = get_items(region)
                     target_items = []
-                    for target_id in cond.detail.targetIds:
+                    for target_id in cond.detail.targetIds[0:5]:
                         target_items.append(next(f'[{item.name}](https://apps.atlasacademy.io/db/{region}/item/{item.id})' for item in items if item.id == target_id))
-                    desc.append(f"Obtain [{', '.join(target_items)}] x {cond.targetNum}")
+                    desc.append(f"Obtain [{', '.join(target_items)}{', ...' if len(cond.detail.targetIds) > 5 else ''}] x {cond.targetNum}")
                 case enums.DetailMissionCondType.BATTLE_SVT_INDIVIDUALITY_IN_DECK.value:
                     traits = []
                     for target_id in cond.detail.targetIds:
