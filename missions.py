@@ -141,7 +141,7 @@ def describe_missions(mission: nice.NiceEventMission, region: str = "JP"):
                 case enums.DetailMissionCondType.FRIEND_POINT_SUMMON.value:
                     desc.append(f"Friend summon {cond.targetNum} times")
                 case _:
-                    desc.append(f'mission detail type {cond.missionCondType} num {cond.targetNum} targets {", ".join(cond.detail.targetIds)}')
+                    desc.append(f'mission detail type {cond.detail.missionCondType} num {cond.targetNum} targets {", ".join(cond.detail.targetIds)}')
 
     if mission.gifts:
         gifts = []
