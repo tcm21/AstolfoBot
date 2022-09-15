@@ -650,7 +650,7 @@ def main():
             )
 
             embed = interactions.Embed(
-                title=f"{len(servants)} matches found. Showing first 20 results.",
+                title=f"{len(servants)} matches found.{' Showing first 20 results.' if len(servants) > 20 else ''}",
                 color=0xf2aba6
             )
 
