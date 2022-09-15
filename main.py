@@ -445,15 +445,14 @@ async def send_paginator(ctx: interactions.CommandContext, pages):
 
 
 def get_np_type(np_type: str):
-    match np_type:
-        case "aoe":
-            return "AoE"
-        case "st":
-            return "Single-Target"
-        case "other":
-            return "Other"
-        case _:
-            return "Unknown"
+    if np_type == "aoe":
+        return "AoE"
+    elif np_type ==  "st":
+        return "Single-Target"
+    elif np_type ==  "other":
+        return "Other"
+    else:
+        return "Unknown"
 
 
 # Autocomplete functions
@@ -888,11 +887,10 @@ def main():
         await ctx.defer()
         np_chargers = await asyncio.to_thread(get_np_chargers, int(amount) * 100, class_name, region, target)
         servants_list = []
-        match np_type:
-            case "aoe" | "st" | "other":
-                servants_list = np_chargers.get(np_type)
-            case _:
-                servants_list = [np_charger for np_charger_list in np_chargers.values() for np_charger in np_charger_list]
+        if np_type == "aoe" or np_type == "st" or np_type == "other":
+            servants_list = np_chargers.get(np_type)
+        else:
+            servants_list = [np_charger for np_charger_list in np_chargers.values() for np_charger in np_charger_list]
                         
         if len(servants_list) == 0:
             await ctx.send("Not found.", ephemeral=True)
