@@ -83,95 +83,92 @@ def describe_missions(mission: nice.NiceEventMission, region: str = "JP"):
         if cond.missionProgressType != nice.NiceMissionProgressType.clear:
             continue
         if cond.detail:
-            if (cond.detail.missionCondType == enums.DetailMissionCondType.QUEST_CLEAR_NUM_1.value or
-                cond.detail.missionCondType == enums.DetailMissionCondType.QUEST_CLEAR_NUM_2.value or
-                cond.detail.missionCondType == enums.DetailMissionCondType.QUEST_CLEAR_NUM_INCLUDING_GRAILFRONT.value
-                ):
-                desc.append(f"Clear any quest {cond.targetNum} times")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.MAIN_QUEST_DONE.value:
-                desc.append(f"Clear any main quest in Arc 1 and Arc 2 {cond.targetNum} times")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.ENEMY_KILL_NUM.value:
-                desc.append(f"Defeat {cond.targetNum} enemies")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value | enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value:
-                traits = []
-                for target_id in cond.detail.targetIds:
-                    trait = enums.TRAIT_NAME[target_id]
-                    traits.append(f'[{title_case(trait.value)}](https://apps.atlasacademy.io/db/{region}/entities?trait={target_id})')
-                desc.append(f"Defeat {cond.targetNum} enemies with traits [{', '.join(traits)}]")                    # desc.append(f'[List of free quests](https://apps.atlasacademy.io/db/{region}/quests?type=free&flag=displayLoopmark{"".join(trait_ids_querystr)}) that has [{", ".join(traits)}]')
-                
-            elif (
-                cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value or
-                cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value
-                ):
-                classes = []
-                for target_id in cond.detail.targetIds:
-                    svt_class = enums.CLASS_NAME[target_id]
-                    classes.append(title_case(svt_class.value))
-                desc.append(f"Defeat {cond.targetNum} enemies with class [{', '.join(classes)}]")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value:
-                classes = []
-                for target_id in cond.detail.targetIds:
-                    svt_class = enums.CLASS_NAME[target_id]
-                    classes.append(title_case(svt_class.value))
-                desc.append(f"Defeat {cond.targetNum} enemies with class [{', '.join(classes)}] except servants")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.BATTLE_SVT_CLASS_IN_DECK.value:
-                classes = []
-                for target_id in cond.detail.targetIds:
-                    svt_class = enums.CLASS_NAME[target_id]
-                    classes.append(title_case(svt_class.value))
-                desc.append(f"Complete any quest {cond.targetNum} times with class [{', '.join(classes)}] in party")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.ITEM_GET_BATTLE.value | enums.DetailMissionCondType.ITEM_GET_TOTAL.value:
-                items = get_items(region)
-                target_items = []
-                for target_id in cond.detail.targetIds[0:5]:
-                    target_items.append(next(f'[{item.name}](https://apps.atlasacademy.io/db/{region}/item/{item.id})' for item in items if item.id == target_id))
-                desc.append(f"Obtain [{', '.join(target_items)}{', ...' if len(cond.detail.targetIds) > 5 else ''}] x {cond.targetNum}")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.BATTLE_SVT_INDIVIDUALITY_IN_DECK.value:
-                traits = []
-                for target_id in cond.detail.targetIds:
-                    trait = enums.TRAIT_NAME[target_id]
-                    traits.append(f'[{title_case(trait.value)}](https://apps.atlasacademy.io/db/{region}/entities?trait={target_id})')
-                desc.append(f"Complete any quest {cond.targetNum} times with traits [{', '.join(traits)}] in party")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.BATTLE_SVT_ID_IN_DECK_1.value | enums.DetailMissionCondType.BATTLE_SVT_ID_IN_DECK_2.value:
-                servants = get_servants(region)
-                target_servants = []
-                for target_id in cond.detail.targetIds:
-                    target_servants.append(next(f'[{svt.name}](https://apps.atlasacademy.io/db/{region}/servant/{svt.id})' for svt in servants if svt.id == target_id))
-                desc.append(f"Complete any quest {cond.targetNum} times with [{', '.join(target_servants)}] in party")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.SVT_GET_BATTLE.value:
-                desc.append(f"Obtain {cond.targetNum} embers")
-            elif cond.detail.missionCondType == enums.DetailMissionCondType.FRIEND_POINT_SUMMON.value:
-                desc.append(f"Friend summon {cond.targetNum} times")
-            else:
-                desc.append(f'mission detail type {cond.missionCondType} num {cond.targetNum} targets {", ".join(cond.detail.targetIds)}')
+            match cond.detail.missionCondType:
+                case (enums.DetailMissionCondType.QUEST_CLEAR_NUM_1.value |
+                      enums.DetailMissionCondType.QUEST_CLEAR_NUM_2.value |
+                      enums.DetailMissionCondType.QUEST_CLEAR_NUM_INCLUDING_GRAILFRONT.value
+                    ):
+                    desc.append(f"Clear any quest {cond.targetNum} times")
+                case enums.DetailMissionCondType.MAIN_QUEST_DONE.value:
+                    desc.append(f"Clear any main quest in Arc 1 and Arc 2 {cond.targetNum} times")
+                case enums.DetailMissionCondType.ENEMY_KILL_NUM.value:
+                    desc.append(f"Defeat {cond.targetNum} enemies")
+                case enums.DetailMissionCondType.DEFEAT_ENEMY_INDIVIDUALITY.value | enums.DetailMissionCondType.ENEMY_INDIVIDUALITY_KILL_NUM.value:
+                    traits = []
+                    for target_id in cond.detail.targetIds:
+                        trait = enums.TRAIT_NAME[target_id]
+                        traits.append(f'[{title_case(trait.value)}](https://apps.atlasacademy.io/db/{region}/entities?trait={target_id})')
+                    desc.append(f"Defeat {cond.targetNum} enemies with traits [{', '.join(traits)}]")                    # desc.append(f'[List of free quests](https://apps.atlasacademy.io/db/{region}/quests?type=free&flag=displayLoopmark{"".join(trait_ids_querystr)}) that has [{", ".join(traits)}]')
+                    
+                case enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value | enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value:
+                    classes = []
+                    for target_id in cond.detail.targetIds:
+                        svt_class = enums.CLASS_NAME[target_id]
+                        classes.append(title_case(svt_class.value))
+                    desc.append(f"Defeat {cond.targetNum} enemies with class [{', '.join(classes)}]")
+                case enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value:
+                    classes = []
+                    for target_id in cond.detail.targetIds:
+                        svt_class = enums.CLASS_NAME[target_id]
+                        classes.append(title_case(svt_class.value))
+                    desc.append(f"Defeat {cond.targetNum} enemies with class [{', '.join(classes)}] except servants")
+                case enums.DetailMissionCondType.BATTLE_SVT_CLASS_IN_DECK.value:
+                    classes = []
+                    for target_id in cond.detail.targetIds:
+                        svt_class = enums.CLASS_NAME[target_id]
+                        classes.append(title_case(svt_class.value))
+                    desc.append(f"Complete any quest {cond.targetNum} times with class [{', '.join(classes)}] in party")
+                case enums.DetailMissionCondType.ITEM_GET_BATTLE.value | enums.DetailMissionCondType.ITEM_GET_TOTAL.value:
+                    items = get_items(region)
+                    target_items = []
+                    for target_id in cond.detail.targetIds[0:5]:
+                        target_items.append(next(f'[{item.name}](https://apps.atlasacademy.io/db/{region}/item/{item.id})' for item in items if item.id == target_id))
+                    desc.append(f"Obtain [{', '.join(target_items)}{', ...' if len(cond.detail.targetIds) > 5 else ''}] x {cond.targetNum}")
+                case enums.DetailMissionCondType.BATTLE_SVT_INDIVIDUALITY_IN_DECK.value:
+                    traits = []
+                    for target_id in cond.detail.targetIds:
+                        trait = enums.TRAIT_NAME[target_id]
+                        traits.append(f'[{title_case(trait.value)}](https://apps.atlasacademy.io/db/{region}/entities?trait={target_id})')
+                    desc.append(f"Complete any quest {cond.targetNum} times with traits [{', '.join(traits)}] in party")
+                case enums.DetailMissionCondType.BATTLE_SVT_ID_IN_DECK_1.value | enums.DetailMissionCondType.BATTLE_SVT_ID_IN_DECK_2.value:
+                    servants = get_servants(region)
+                    target_servants = []
+                    for target_id in cond.detail.targetIds:
+                        target_servants.append(next(f'[{svt.name}](https://apps.atlasacademy.io/db/{region}/servant/{svt.id})' for svt in servants if svt.id == target_id))
+                    desc.append(f"Complete any quest {cond.targetNum} times with [{', '.join(target_servants)}] in party")
+                case enums.DetailMissionCondType.SVT_GET_BATTLE.value:
+                    desc.append(f"Obtain {cond.targetNum} embers")
+                case enums.DetailMissionCondType.FRIEND_POINT_SUMMON.value:
+                    desc.append(f"Friend summon {cond.targetNum} times")
+                case _:
+                    desc.append(f'mission detail type {cond.missionCondType} num {cond.targetNum} targets {", ".join(cond.detail.targetIds)}')
 
     if mission.gifts:
         gifts = []
         for gift in mission.gifts:
-            if (gift.type == nice.NiceGiftType.servant.value or
-                gift.type == nice.NiceGiftType.eventSvtJoin.value or
-                gift.type == nice.NiceGiftType.eventSvtGet.value):
-                servants = get_servants(region)
-                gifts.append(next(f'[[{svt.name}](https://apps.atlasacademy.io/db/{region}/servant/{svt.id})] x {gift.num}' for svt in servants if svt.id == gift.objectId))
-            elif gift.type == nice.NiceGiftType.item.value:
-                items = get_items(region)
-                gifts.append(next(f'[[{item.name}](https://apps.atlasacademy.io/db/{region}/item/{item.id})] x {gift.num}' for item in items if item.id == gift.objectId))
-            # case nice.NiceGiftType.equip.value:
-            #     # TODO: mystic code
-            #     pass
-            # case nice.NiceGiftType.questRewardIcon.value:
-            #     pass
-            # case nice.NiceGiftType.costumeGet.value | nice.NiceGiftType.costumeRelease.value:
-            #     # TODO: Costume
-            #     pass
-            # case nice.NiceGiftType.commandCode.value:
-            #     # TODO: Command codes
-            #     pass
-            # case nice.NiceGiftType.eventPointBuff.value:
-            #     # TODO: Command codes
-            #     pass
-            else:
-                gifts.append(f'{gift.type} {gift.objectId} {gift.priority} {gift.num}')
+            match gift.type:
+                case nice.NiceGiftType.servant.value | nice.NiceGiftType.eventSvtJoin.value | nice.NiceGiftType.eventSvtGet.value:
+                    servants = get_servants(region)
+                    gifts.append(next(f'[[{svt.name}](https://apps.atlasacademy.io/db/{region}/servant/{svt.id})] x {gift.num}' for svt in servants if svt.id == gift.objectId))
+                case nice.NiceGiftType.item.value:
+                    items = get_items(region)
+                    gifts.append(next(f'[[{item.name}](https://apps.atlasacademy.io/db/{region}/item/{item.id})] x {gift.num}' for item in items if item.id == gift.objectId))
+                # case nice.NiceGiftType.equip.value:
+                #     # TODO: mystic code
+                #     pass
+                # case nice.NiceGiftType.questRewardIcon.value:
+                #     pass
+                # case nice.NiceGiftType.costumeGet.value | nice.NiceGiftType.costumeRelease.value:
+                #     # TODO: Costume
+                #     pass
+                # case nice.NiceGiftType.commandCode.value:
+                #     # TODO: Command codes
+                #     pass
+                # case nice.NiceGiftType.eventPointBuff.value:
+                #     # TODO: Command codes
+                #     pass
+                case _:
+                    gifts.append(f'{gift.type} {gift.objectId} {gift.priority} {gift.num}')
 
         desc.append(f'Rewards: {", ".join(gifts)}')
             
