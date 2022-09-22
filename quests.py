@@ -7,6 +7,9 @@ import datetime
 import sys
 import asyncio
 
+import cvxpy
+import numpy as np
+
 import fgo_api_types.nice as nice
 import fgo_api_types.basic as basic
 import fgo_api_types.enums as enums
@@ -289,9 +292,6 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
 
     if len(quest_results) == 0:
         return None
-
-    import cvxpy
-    import numpy as np
 
     # quest_results contains the activities data (cost, number of enemies for each traits)
     number_of_times = cvxpy.Variable(len(quest_results), integer=True)
