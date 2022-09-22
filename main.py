@@ -492,7 +492,7 @@ def populate_target_list(input_value: str):
     ]
     choices = []
     for option in filteredOptions[0:24]:
-        choices.append(interactions.Choice(name=option[1], value=option[0]))
+        choices.append(interactions.Choice(name=title_case(option[1]), value=option[0]))
     return choices
 
 
