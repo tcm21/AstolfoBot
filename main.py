@@ -280,6 +280,8 @@ def get_skills(
     totalCount = 0
     embed_desc = []
     for skill in matched_skills_list:
+        if not skill.get('name'):
+            continue
         skill_details = get_skill_details(skill.get('id'), flag)
         if (skill_details.get('type') == "passive"):
             continue
@@ -313,6 +315,8 @@ def get_skills(
 
     pages = []
     if (totalCount == 0):
+        embed.description = "No result."
+        pages.append(Page("Search result", embeds=embed))
         return pages
     else:
         embed.set_footer("Data via Atlas Academy")
@@ -353,7 +357,7 @@ def create_embed(type: str = "", type2: str = "", flag: str = "skill", target: s
     if type2:
         embed.add_field("Effect 2", func_desc_dict.get(type2), True)
     if target:
-        embed.add_field("Target", target_desc_dict.get(target), True)
+        embed.add_field("Target", title_case(target_desc_dict.get(target)), True)
     if buffType1:
         embed.add_field("Effect 1", buff_desc_dict.get(buffType1), True)
     if buffType2:
