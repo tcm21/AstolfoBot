@@ -55,6 +55,8 @@ class TraitSearchQuery:
             if self.is_or:
                 if NON_SERVANT_TRAIT_ID in self.trait_id:
                     trait_name = f'{" or ".join([title_case(enums.TRAIT_NAME[id].value) for id in filter(lambda i: i != NON_SERVANT_TRAIT_ID, self.trait_id)])} (Not servant)'
+                elif SERVANT_TRAIT_ID in self.trait_id:
+                    trait_name = f'{" or ".join([title_case(enums.TRAIT_NAME[id].value) for id in filter(lambda i: i != SERVANT_TRAIT_ID, self.trait_id)])} (Servant)'
                 else:
                     trait_name = " or ".join([title_case(enums.TRAIT_NAME[id].value) for id in self.trait_id])
             else:
@@ -190,6 +192,7 @@ CLASS_TRAIT_MAP: dict[int, int] = {
     28: 120, # enums.Trait.classPretender,
 }
 
+SERVANT_TRAIT_ID: int = 1000
 NON_SERVANT_TRAIT_ID: int = 5010
 
 
@@ -222,6 +225,8 @@ async def get_optimized_quests(region: str = "JP", load_from_disk: bool = False)
                             targetids = [CLASS_TRAIT_MAP[targetid] for targetid in cond.detail.targetIds]
                             if cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value:
                                 targetids.append(NON_SERVANT_TRAIT_ID)
+                            if cond.detail.missionCondType == enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value:
+                                targetids.append(SERVANT_TRAIT_ID)
                             new_target_trait = TraitSearchQuery(targetids, cond.targetNum, True)
                             existing_target_trait = next((target_trait for target_trait in target_traits if target_trait == new_target_trait), None)
                             if existing_target_trait: 
@@ -367,7 +372,14 @@ def create_quest_result(
                     ):
                         enemy_count += enemy.count
                     elif (
+                        SERVANT_TRAIT_ID in target_trait_id and
+                        any(target_id in enemy.traits for target_id in filter(lambda id: id != SERVANT_TRAIT_ID, target_trait_id)) and
+                        SERVANT_TRAIT_ID in enemy.traits
+                    ):
+                        enemy_count += enemy.count
+                    elif (
                         NON_SERVANT_TRAIT_ID not in target_trait_id and
+                        SERVANT_TRAIT_ID not in target_trait_id and
                         any(target_id in enemy.traits for target_id in target_trait_id)
                     ):
                         enemy_count += enemy.count

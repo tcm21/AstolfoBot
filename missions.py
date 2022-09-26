@@ -100,12 +100,18 @@ def describe_missions(mission: nice.NiceEventMission, region: str = "JP"):
                         traits.append(f'[{title_case(trait.value)}](https://apps.atlasacademy.io/db/{region}/entities?trait={target_id})')
                     desc.append(f"Defeat {cond.targetNum} enemies with traits [{', '.join(traits)}]")                    # desc.append(f'[List of free quests](https://apps.atlasacademy.io/db/{region}/quests?type=free&flag=displayLoopmark{"".join(trait_ids_querystr)}) that has [{", ".join(traits)}]')
                     
-                case enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value | enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value:
+                case enums.DetailMissionCondType.DEFEAT_ENEMY_CLASS.value:
                     classes = []
                     for target_id in cond.detail.targetIds:
                         svt_class = enums.CLASS_NAME[target_id]
                         classes.append(title_case(svt_class.value))
                     desc.append(f"Defeat {cond.targetNum} enemies with class [{', '.join(classes)}]")
+                case enums.DetailMissionCondType.DEFEAT_SERVANT_CLASS.value:
+                    classes = []
+                    for target_id in cond.detail.targetIds:
+                        svt_class = enums.CLASS_NAME[target_id]
+                        classes.append(title_case(svt_class.value))
+                    desc.append(f"Defeat {cond.targetNum} enemy servants with class [{', '.join(classes)}]")
                 case enums.DetailMissionCondType.DEFEAT_ENEMY_NOT_SERVANT_CLASS.value:
                     classes = []
                     for target_id in cond.detail.targetIds:
