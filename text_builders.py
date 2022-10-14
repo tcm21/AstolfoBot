@@ -113,7 +113,7 @@ def get_skill_description(session: requests_cache.CachedSession, skill, sub_skil
                     values_text = get_overcharge_values(function, buff_type, func_type)
                 else:
                     is_single_value = True
-                    if buff_type == "addIndividuality": # Add trait
+                    if buff_type == "addIndividuality" or buff_type == "subIndividuality": # Add/Remove trait
                         values_text = f'{get_trait_desc(svals_level[0].get("Value"), region)}'
                     elif buff_type == "fieldIndividuality": # Change fields
                         values_text = f'{get_trait_desc(svals_level[0].get("Value"), region)}'
@@ -544,6 +544,7 @@ buff_desc_dict = {
     "avoidState": "Immunity",
     "addDamage": "Damage Plus",
     "addIndividuality": "Add Trait",
+    "subIndividuality": "Remove Trait",
     "avoidance": "Evade",
     "avoidanceIndividuality": "Evade",
     "changeCommandCardType": "Change Command Card Types",
